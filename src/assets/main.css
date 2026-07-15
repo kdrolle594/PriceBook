@@ -1,0 +1,113 @@
+/* ————————————————————————————————————————————————
+   Price Book — design tokens
+   A private ledger of real prices: calm, precise, trustworthy.
+   ———————————————————————————————————————————————— */
+
+:root {
+  /* palette — light */
+  --bg: #FBFBF9;
+  --surface: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --ink: #1A1C1E;
+  --muted: #6D7278;
+  --faint: #9BA0A6;
+  --hairline: #E7E7E2;
+  --hairline-strong: #D8D8D2;
+  --low: #0E7A4E;          /* historic low / savings */
+  --low-soft: #E7F3ED;
+  --high: #B4690E;         /* seen cheaper before */
+  --high-soft: #F8EEDF;
+  --danger: #B3372E;
+  --danger-soft: #F9EAE8;
+  --focus: #1A1C1E;
+  --scrim: rgba(20, 21, 23, 0.4);
+  --shadow: 0 1px 2px rgba(26, 28, 30, 0.05), 0 8px 24px rgba(26, 28, 30, 0.06);
+
+  /* chart series (validated categorical slots — fixed order, never cycled) */
+  --series-1: #2A78D6;
+  --series-2: #1BAF7A;
+  --series-3: #EDA100;
+  --series-4: #008300;
+
+  /* type */
+  --font-display: "Bricolage Grotesque", Georgia, serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", Consolas, monospace;
+
+  /* rhythm */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --col: 720px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141517;
+    --surface: #1D1F22;
+    --surface-raised: #232529;
+    --ink: #ECEDEA;
+    --muted: #9BA0A6;
+    --faint: #6D7278;
+    --hairline: #2B2D31;
+    --hairline-strong: #3A3D42;
+    --low: #4CC38A;
+    --low-soft: #16281F;
+    --high: #E0A458;
+    --high-soft: #2C2214;
+    --danger: #E5786E;
+    --danger-soft: #2E1B19;
+    --focus: #ECEDEA;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+
+    --series-1: #3987E5;
+    --series-2: #199E70;
+    --series-3: #C98500;
+    --series-4: #008300;
+  }
+}
+
+/* ———— reset ———— */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+img, svg { display: block; max-width: 100%; }
+
+button, input, select {
+  font: inherit;
+  color: inherit;
+}
+
+button { background: none; border: none; cursor: pointer; }
+
+/* visible focus, keyboard only */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::selection { background: var(--low-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ———— shared utility ———— */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

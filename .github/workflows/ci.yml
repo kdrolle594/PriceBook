@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      # Verifies the live project's RLS still blocks anonymous access.
+      # Add repo secrets SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to enable;
+      # skipped silently when they aren't set.
+      - name: RLS smoke test
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ]; then
+            echo "SUPABASE_URL secret not set — skipping RLS smoke test"
+            exit 0
+          fi
+          npm run check:rls
