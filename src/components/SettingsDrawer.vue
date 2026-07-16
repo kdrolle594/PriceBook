@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
+import AdminLogin from './AdminLogin.vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -49,14 +50,20 @@ function onKeydown(e) {
 
         <section class="section">
           <span class="label">Account</span>
-          <p class="hint">
-            <template v-if="userEmail">
+          <template v-if="userEmail">
+            <p class="hint">
               Signed in as <span class="mono">{{ userEmail }}</span>
               <template v-if="isAdmin"> · admin</template>
-            </template>
-            <template v-else>Browsing as a guest — prices are view-only.</template>
-          </p>
-          <button class="ghost solid" @click="emit('sign-out')">Sign out</button>
+            </p>
+            <button class="ghost solid" @click="emit('sign-out')">Sign out</button>
+          </template>
+          <template v-else>
+            <p class="hint">
+              No account needed to browse prices or build a shopping list.
+              Admins sign in here to scan flyers and manage the book.
+            </p>
+            <AdminLogin />
+          </template>
         </section>
 
         <section v-if="hasData || isAdmin" class="section">

@@ -59,6 +59,19 @@ async function loadAll() {
   }
 }
 
+// Store names come from OCR and free-text inputs, so the same store shows up
+// as "WALMART ", "walmart", or with a non-breaking space. Collapse whitespace
+// and reuse an existing store's spelling on a case-insensitive match so it
+// never counts as a new store.
+function storeKey(s) {
+  return s.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+export function normalizeStore(name, existingStores = []) {
+  const cleaned = (name || '').replace(/\s+/g, ' ').trim()
+  const key = cleaned.toLowerCase()
+  return existingStores.find(s => storeKey(s) === key) || cleaned
+}
+
 // Sale window state for one entry; null when the flyer had no end date.
 // `now` is injectable for tests.
 export function validity(entry, now = today()) {
@@ -73,6 +86,18 @@ export function validity(entry, now = today()) {
   const thru = new Date(entry.endDate + 'T00:00:00')
     .toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return { state: 'active', label: `valid thru ${thru}` }
+}
+
+// What this item likely costs right now: the cheapest still-running sale,
+// or the most recent sighting when nothing is on sale. `now` is injectable
+// for tests.
+export function bestOffer(item, now = today()) {
+  const active = item.history.filter(h => h.endDate && h.endDate >= now)
+  if (active.length) {
+    return { entry: active.reduce((a, b) => (b.price < a.price ? b : a)), onSale: true }
+  }
+  const entry = [...item.history].sort((a, b) => b.date.localeCompare(a.date))[0]
+  return { entry, onSale: false }
 }
 
 // v1 localStorage had no flyer records — group entries by store+date into
@@ -106,25 +131,50 @@ export function usePriceBook() {
   const q = ref('')
   const filter = ref('all')
 
-  const stores = computed(() =>
-    [...new Set(items.value.flatMap(i => i.history.map(h => h.store)))]
-  )
+  // One spelling per store, from flyers and price history alike.
+  const stores = computed(() => {
+    const seen = new Map()
+    const all = [
+      ...flyers.value.map(f => f.store),
+      ...items.value.flatMap(i => i.history.map(h => h.store)),
+    ]
+    for (const s of all) {
+      const key = storeKey(s)
+      if (key && !seen.has(key)) seen.set(key, s.replace(/\s+/g, ' ').trim())
+    }
+    return [...seen.values()]
+  })
   const dealCount = computed(() =>
     items.value.filter(i => i.history.length > 1 && isDeal(i)).length
   )
   const multiCount = computed(() =>
     items.value.filter(i => i.history.length > 1).length
   )
+  const saleCount = computed(() => items.value.filter(i => activeSaleEnd(i)).length)
+
+  // End date of the latest price's still-running sale window; null when the
+  // latest price has no window or it already expired.
+  function activeSaleEnd(it) {
+    const cur = latest(it)
+    const v = validity(cur)
+    return v && v.state !== 'expired' ? cur.endDate : null
+  }
 
   const shown = computed(() => {
     let list = items.value
     if (filter.value === 'deals') list = list.filter(i => i.history.length > 1 && isDeal(i))
     if (filter.value === 'multi') list = list.filter(i => i.history.length > 1)
+    if (filter.value === 'sale') list = list.filter(i => activeSaleEnd(i))
     const query = q.value.trim().toLowerCase()
     if (query) list = list.filter(i => (i.display + ' ' + i.size).toLowerCase().includes(query))
-    return [...list].sort((a, b) =>
-      b.history.length - a.history.length || a.display.localeCompare(b.display)
-    )
+    // Active deals first (soonest to end on top), then the old ordering.
+    return [...list].sort((a, b) => {
+      const ae = activeSaleEnd(a)
+      const be = activeSaleEnd(b)
+      if (!!ae !== !!be) return ae ? -1 : 1
+      if (ae && be && ae !== be) return ae.localeCompare(be)
+      return b.history.length - a.history.length || a.display.localeCompare(b.display)
+    })
   })
 
   const sortedFlyers = computed(() =>
@@ -161,7 +211,7 @@ export function usePriceBook() {
       .filter(p => !seen.has(p.canonical) && seen.add(p.canonical))
     if (!rows.length) return { added: 0, updated: 0 }
 
-    const store = parsed.s || 'Unknown'
+    const store = normalizeStore(parsed.s, stores.value) || 'Unknown'
     const startDate = parsed.d || today()
     const endDate = parsed.e || null
 
@@ -267,6 +317,7 @@ export function usePriceBook() {
 
   // One price seen in-store, no flyer. Creates the item when itemId is null.
   async function addManualPrice({ itemId, display, size, store, date, endDate, price }) {
+    store = normalizeStore(store, stores.value) || 'Unknown'
     let id = itemId
     if (!id) {
       const canonical = `${display} ${size}`.trim().toLowerCase()
@@ -362,7 +413,7 @@ export function usePriceBook() {
 
   return {
     items, flyers, sortedFlyers, loading, q, filter,
-    stores, dealCount, multiCount, shown,
+    stores, dealCount, multiCount, saleCount, shown,
     sortedHist, latest, minPrice, isDeal, deltaPct, validity,
     loadAll, mergeFlyer, deleteFlyer, exportJSON, importJSON, localBackup, clearAll,
     updateItem, deleteItem, updateEntry, deleteEntry, mergeItems, addManualPrice,

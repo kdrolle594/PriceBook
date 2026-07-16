@@ -4,6 +4,7 @@ const filter = defineModel('filter', { type: String })
 
 const options = [
   { value: 'all', label: 'All' },
+  { value: 'sale', label: 'On sale' },
   { value: 'deals', label: 'Lows' },
   { value: 'multi', label: 'History' },
 ]

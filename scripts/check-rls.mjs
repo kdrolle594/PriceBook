@@ -1,5 +1,6 @@
 // RLS smoke test — verifies the security boundary from outside the app:
-//   anonymous requests read nothing, write nothing, and the RPCs refuse.
+//   anonymous requests can read prices but not profiles, write nothing,
+//   and the RPCs refuse.
 // Usage: node scripts/check-rls.mjs
 // Reads SUPABASE_URL/key from env vars or .env.local.
 import { readFileSync } from 'node:fs'
@@ -31,11 +32,19 @@ function check(name, ok, detail) {
   if (!ok) failures++
 }
 
-// 1. Anonymous reads return empty (RLS filters, tables exist)
-for (const table of ['profiles', 'flyers', 'items', 'price_entries']) {
+// 1a. Price data is publicly readable (browsing needs no account)
+for (const table of ['flyers', 'items', 'price_entries']) {
   const r = await fetch(`${URL_}/rest/v1/${table}?select=*&limit=1`, { headers })
   const body = await r.text()
-  check(`anon read ${table} is empty`, r.status === 200 && body.trim() === '[]',
+  check(`anon read ${table} succeeds`, r.status === 200,
+    `HTTP ${r.status}: ${body.slice(0, 120)}`)
+}
+
+// 1b. Profiles stay private — anonymous reads see nothing
+{
+  const r = await fetch(`${URL_}/rest/v1/profiles?select=*&limit=1`, { headers })
+  const body = await r.text()
+  check('anon read profiles is empty', r.status === 200 && body.trim() === '[]',
     `HTTP ${r.status}: ${body.slice(0, 120)}`)
 }
 

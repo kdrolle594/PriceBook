@@ -57,11 +57,5 @@ export function useAuth() {
     await supabase.auth.signOut()
   }
 
-  // View-only guest — reads are allowed by RLS, writes stay admin-only
-  async function signInAsGuest() {
-    const { error } = await supabase.auth.signInAnonymously()
-    if (error) throw new Error(error.message)
-  }
-
-  return { session, user, profile, isAdmin, ready, signIn, signUp, signOut, signInAsGuest }
+  return { session, user, profile, isAdmin, ready, signIn, signUp, signOut }
 }

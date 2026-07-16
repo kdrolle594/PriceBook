@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import Sparkline from './Sparkline.vue'
 import { usePriceBook } from '../composables/usePriceBook.js'
+import { useCart } from '../composables/useCart.js'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -10,6 +11,9 @@ const props = defineProps({
 const emit = defineEmits(['open'])
 
 const { sortedHist, latest, minPrice, isDeal, deltaPct, validity } = usePriceBook()
+const { inCart, toggle } = useCart()
+
+const carted = computed(() => inCart(props.item.id))
 
 const hist = computed(() => sortedHist(props.item))
 const current = computed(() => latest(props.item))
@@ -62,12 +66,25 @@ function fmtDate(iso) {
 
       <span class="caret" aria-hidden="true">›</span>
     </button>
+
+    <button
+      class="cart-btn"
+      :class="{ carted }"
+      :aria-label="carted ? `Remove ${item.display} from shopping list` : `Add ${item.display} to shopping list`"
+      :title="carted ? 'In your shopping list' : 'Add to shopping list'"
+      @click="toggle(item.id)"
+    >
+      {{ carted ? '✓' : '+' }}
+    </button>
   </li>
 </template>
 
 <style scoped>
 .row {
   list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -75,10 +92,32 @@ function fmtDate(iso) {
   display: flex;
   align-items: center;
   gap: 14px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 14px 4px;
   text-align: left;
   border-radius: var(--radius-sm);
+}
+
+.cart-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.cart-btn:hover { color: var(--ink); border-color: var(--hairline-strong); }
+
+.cart-btn.carted {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 
 .row-main:hover { background: var(--surface); }

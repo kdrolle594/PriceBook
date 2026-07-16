@@ -1,7 +1,6 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import AppHeader from './components/AppHeader.vue'
-import AuthScreen from './components/AuthScreen.vue'
 import UploadZone from './components/UploadZone.vue'
 import StatsBar from './components/StatsBar.vue'
 import FilterBar from './components/FilterBar.vue'
@@ -12,22 +11,28 @@ import FlyerReview from './components/FlyerReview.vue'
 import FlyerLog from './components/FlyerLog.vue'
 import ItemDetail from './components/ItemDetail.vue'
 import AddPriceForm from './components/AddPriceForm.vue'
+import CartView from './components/CartView.vue'
 import { usePriceBook } from './composables/usePriceBook.js'
+import { useCart } from './composables/useCart.js'
 import { useAuth } from './composables/useAuth.js'
 import { extractFlyer } from './lib/extractFlyer.js'
 import { isConfigured } from './lib/supabase.js'
 
 const {
   items, flyers, sortedFlyers, loading, q, filter,
-  stores, dealCount, multiCount, shown,
+  stores, dealCount, multiCount, saleCount, shown,
   loadAll, mergeFlyer, deleteFlyer, exportJSON, importJSON, localBackup, clearAll,
 } = usePriceBook()
 
-const { session, user, isAdmin, ready, signOut } = isConfigured
+// Browsing needs no account — auth only unlocks admin tools, via Settings.
+const { user, isAdmin, signOut } = isConfigured
   ? useAuth()
-  : { session: ref(null), user: ref(null), isAdmin: ref(false), ready: ref(false), signOut: () => {} }
+  : { user: ref(null), isAdmin: ref(false), signOut: () => {} }
+
+const { count: cartCount } = useCart()
 
 const settingsOpen = ref(false)
+const view = ref('book') // 'book' | 'cart'
 const busy = ref(false)
 const progress = ref('')
 const status = ref('')
@@ -46,10 +51,9 @@ const detailItem = computed(() => items.value.find(i => i.id === detailId.value)
 
 const manualAddOpen = ref(false)
 
+// Reads are public — load straight away, session or not.
 if (isConfigured) {
-  watch(session, (s) => {
-    if (s) loadAll().catch(err => fail(`Could not load prices: ${err.message}`))
-  }, { immediate: true })
+  loadAll().catch(err => fail(`Could not load prices: ${err.message}`))
 }
 
 function fail(msg) {
@@ -166,22 +170,24 @@ async function onSignOut() {
       <li>Create a free project at <span class="mono">supabase.com</span></li>
       <li>Run <span class="mono">supabase/schema.sql</span> in the SQL editor</li>
       <li>Copy <span class="mono">.env.example</span> to <span class="mono">.env.local</span> and fill in your project URL and anon key</li>
-      <li>Restart the dev server, sign up, then make yourself admin:<br>
+      <li>Restart the dev server, create an account (Settings → Account), then make yourself admin:<br>
         <span class="mono">update profiles set is_admin = true where email = 'you@…';</span></li>
     </ol>
   </div>
 
-  <template v-else-if="ready">
-    <AuthScreen v-if="!session" />
+  <template v-else>
+    <AppHeader
+      :item-count="items.length"
+      :flyer-count="flyers.length"
+      :cart-count="cartCount"
+      @open-cart="view = view === 'cart' ? 'book' : 'cart'"
+      @open-settings="settingsOpen = true"
+    />
 
-    <template v-else>
-      <AppHeader
-        :item-count="items.length"
-        :flyer-count="flyers.length"
-        @open-settings="settingsOpen = true"
-      />
+    <main class="page">
+      <CartView v-if="view === 'cart'" @back="view = 'book'" />
 
-      <main class="page">
+      <template v-else>
         <UploadZone
           v-if="isAdmin"
           :busy="busy"
@@ -206,6 +212,7 @@ async function onSignOut() {
         <template v-if="items.length">
           <StatsBar
             :deal-count="dealCount"
+            :sale-count="saleCount"
             :store-count="stores.length"
             :multi-count="multiCount"
           />
@@ -221,38 +228,38 @@ async function onSignOut() {
         </template>
 
         <EmptyState v-else-if="!busy && !loading" :is-admin="isAdmin" />
-      </main>
+      </template>
+    </main>
 
-      <ItemDetail
-        v-if="detailItem"
-        :item="detailItem"
-        :is-admin="isAdmin"
-        @close="detailId = null"
-      />
+    <ItemDetail
+      v-if="detailItem"
+      :item="detailItem"
+      :is-admin="isAdmin"
+      @close="detailId = null"
+    />
 
-      <FlyerReview
-        v-if="currentReview"
-        :parsed="currentReview.parsed"
-        :file-name="currentReview.fileName"
-        :known-canonicals="knownCanonicals"
-        @save="onReviewSave"
-        @discard="onReviewDiscard"
-      />
+    <FlyerReview
+      v-if="currentReview"
+      :parsed="currentReview.parsed"
+      :file-name="currentReview.fileName"
+      :known-canonicals="knownCanonicals"
+      @save="onReviewSave"
+      @discard="onReviewDiscard"
+    />
 
-      <SettingsDrawer
-        :open="settingsOpen"
-        :has-data="items.length > 0"
-        :is-admin="isAdmin"
-        :user-email="user?.email || ''"
-        :has-local-backup="hasLocalBackup"
-        @close="settingsOpen = false"
-        @clear-all="onClearAll"
-        @export="onExport"
-        @import="onImport"
-        @migrate="onMigrate"
-        @sign-out="onSignOut"
-      />
-    </template>
+    <SettingsDrawer
+      :open="settingsOpen"
+      :has-data="items.length > 0"
+      :is-admin="isAdmin"
+      :user-email="user?.email || ''"
+      :has-local-backup="hasLocalBackup"
+      @close="settingsOpen = false"
+      @clear-all="onClearAll"
+      @export="onExport"
+      @import="onImport"
+      @migrate="onMigrate"
+      @sign-out="onSignOut"
+    />
   </template>
 </template>
 

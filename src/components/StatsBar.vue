@@ -1,6 +1,7 @@
 <script setup>
 defineProps({
   dealCount: { type: Number, required: true },
+  saleCount: { type: Number, required: true },
   storeCount: { type: Number, required: true },
   multiCount: { type: Number, required: true },
 })
@@ -11,6 +12,10 @@ defineProps({
     <div class="stat">
       <dt>At historic low</dt>
       <dd class="mono" :class="{ 'has-lows': dealCount > 0 }">{{ dealCount }}</dd>
+    </div>
+    <div class="stat">
+      <dt>On sale now</dt>
+      <dd class="mono">{{ saleCount }}</dd>
     </div>
     <div class="stat">
       <dt>Stores</dt>

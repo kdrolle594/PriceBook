@@ -15,11 +15,26 @@ export function parseResponse(text) {
   try {
     return JSON.parse(clean)
   } catch {
-    // Response was cut off — salvage the complete items before the cutoff
-    const cut = clean.lastIndexOf('],')
-    if (cut === -1) throw new Error('Could not read any items')
-    return JSON.parse(clean.slice(0, cut + 1) + ']}')
+    return salvage(clean)
   }
+}
+
+// The model sometimes truncates mid-item or emits a single malformed item
+// (unescaped inch-mark in a size like 12", or a "2/5.00" price). Recover the
+// header fields plus every item that parses on its own; drop only broken ones.
+function salvage(clean) {
+  const field = (key) => new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`).exec(clean)?.[1] ?? ''
+  const itemsStart = clean.search(/"i"\s*:/)
+  const body = itemsStart === -1 ? clean : clean.slice(itemsStart)
+  const i = []
+  for (const [candidate] of body.matchAll(/\[(?:[^[\]"]|"(?:[^"\\]|\\.)*")*\]/g)) {
+    try {
+      const item = JSON.parse(candidate)
+      if (Array.isArray(item) && typeof item[0] === 'string') i.push(item)
+    } catch { /* skip the malformed item */ }
+  }
+  if (!i.length) throw new Error('Could not read any items')
+  return { s: field('s'), d: field('d'), e: field('e'), i }
 }
 
 /**

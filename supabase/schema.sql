@@ -63,12 +63,12 @@ alter table public.price_entries enable row level security;
 -- profiles: users read only their own row (keeps emails private); no client writes
 create policy "profiles read own" on public.profiles for select to authenticated using (id = auth.uid());
 
--- data tables: authenticated read; admin-only writes
-create policy "flyers read"  on public.flyers        for select to authenticated using (true);
+-- data tables: public read (no account needed to browse prices); admin-only writes
+create policy "flyers read"  on public.flyers        for select to anon, authenticated using (true);
 create policy "flyers admin" on public.flyers        for all    to authenticated using (public.is_admin()) with check (public.is_admin());
-create policy "items read"   on public.items         for select to authenticated using (true);
+create policy "items read"   on public.items         for select to anon, authenticated using (true);
 create policy "items admin"  on public.items         for all    to authenticated using (public.is_admin()) with check (public.is_admin());
-create policy "prices read"  on public.price_entries for select to authenticated using (true);
+create policy "prices read"  on public.price_entries for select to anon, authenticated using (true);
 create policy "prices admin" on public.price_entries for all    to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- atomic flyer delete + orphan-item prune

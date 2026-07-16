@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validity, migrateV1 } from './usePriceBook.js'
+import { validity, migrateV1, normalizeStore, bestOffer, usePriceBook } from './usePriceBook.js'
 
 const NOW = '2026-07-09'
 
@@ -23,6 +23,70 @@ describe('validity', () => {
     const v = validity({ endDate: '2026-07-20' }, NOW)
     expect(v.state).toBe('active')
     expect(v.label).toMatch(/^valid thru /)
+  })
+})
+
+describe('normalizeStore', () => {
+  it('collapses whitespace, including non-breaking spaces from OCR', () => {
+    expect(normalizeStore('  Super C ')).toBe('Super C')
+  })
+
+  it('reuses an existing store spelling on a case-insensitive match', () => {
+    expect(normalizeStore('WALMART ', ['Walmart', 'Maxi'])).toBe('Walmart')
+    expect(normalizeStore('maxi', ['Walmart', 'Maxi'])).toBe('Maxi')
+  })
+
+  it('keeps genuinely new stores as typed', () => {
+    expect(normalizeStore('Metro', ['Walmart'])).toBe('Metro')
+    expect(normalizeStore(null, ['Walmart'])).toBe('')
+  })
+})
+
+describe('bestOffer', () => {
+  it('picks the cheapest still-running sale', () => {
+    const item = { history: [
+      { store: 'Maxi', date: '2026-07-01', endDate: '2026-07-20', price: 3.0 },
+      { store: 'IGA', date: '2026-07-05', endDate: '2026-07-12', price: 2.5 },
+      { store: 'Metro', date: '2026-07-08', endDate: null, price: 2.0 },
+    ] }
+    const { entry, onSale } = bestOffer(item, NOW)
+    expect(onSale).toBe(true)
+    expect(entry.store).toBe('IGA')
+  })
+
+  it('falls back to the latest sighting when no sale is running', () => {
+    const item = { history: [
+      { store: 'Maxi', date: '2026-06-01', endDate: '2026-06-07', price: 1.0 },
+      { store: 'IGA', date: '2026-06-20', endDate: null, price: 4.0 },
+    ] }
+    const { entry, onSale } = bestOffer(item, NOW)
+    expect(onSale).toBe(false)
+    expect(entry.store).toBe('IGA')
+  })
+})
+
+describe('shown ordering', () => {
+  const entry = (over = {}) => ({
+    store: 'Maxi', date: '2026-06-01', endDate: null, price: 2, ...over,
+  })
+  const book = usePriceBook()
+
+  it('puts items with an active sale first, soonest ending on top', () => {
+    book.items.value = [
+      { display: 'No sale', size: '', history: [entry()] },
+      { display: 'Ends later', size: '', history: [entry({ endDate: '2999-02-01' })] },
+      { display: 'Ends soon', size: '', history: [entry({ endDate: '2999-01-01' })] },
+      { display: 'Expired', size: '', history: [entry({ endDate: '2000-01-01' })] },
+    ]
+    expect(book.shown.value.map(i => i.display))
+      .toEqual(['Ends soon', 'Ends later', 'Expired', 'No sale'])
+  })
+
+  it('filters to active sales only', () => {
+    book.filter.value = 'sale'
+    expect(book.shown.value.map(i => i.display)).toEqual(['Ends soon', 'Ends later'])
+    book.filter.value = 'all'
+    book.items.value = []
   })
 })
 
