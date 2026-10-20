@@ -1,4 +1,4 @@
-# Price Book
+# Shelf Check
 
 Track supermarket flyer prices over time and spot which "sales" are actually the
 lowest price. Scan a flyer photo and Claude extracts every item and price; each
@@ -18,8 +18,11 @@ but only admins can scan flyers, edit items, or delete data.
   before anything enters the book
 - **Flyer log** — every scan is listed and can be deleted along with all the
   prices it contributed
-- **Price history** — per-store price chart, historic-low and price-change
-  chips, sale-validity badges ("ends in 3 days", "expired")
+- **Shelf check** — every item shows where today's price sits between the
+  lowest and highest ever seen, with a plain verdict ("Lowest price seen",
+  "Higher than usual")
+- **Price history** — per-store price chart and sale-validity tags
+  ("ends in 3 days", "expired")
 - **Item management** — rename, fix single prices, merge AI-duplicated items
 - **Manual entry** — record a price you saw in-store, no flyer needed
 - **Backup** — JSON export/restore

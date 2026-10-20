@@ -100,6 +100,24 @@ export function bestOffer(item, now = today()) {
   return { entry, onSale: false }
 }
 
+// Where the latest price sits between the lowest and highest ever seen —
+// the "shelf check" shown on every item. pct is 0 at the low, 1 at the high.
+export function shelfCheck(item) {
+  const prices = item.history.map(h => h.price)
+  const current = [...item.history].sort((a, b) => b.date.localeCompare(a.date))[0].price
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const base = { current, min, max, count: prices.length }
+  if (prices.length < 2) return { ...base, pct: null, tone: 'none', verdict: 'First price seen' }
+  if (min === max) return { ...base, pct: 0.5, tone: 'flat', verdict: 'Same price every time' }
+  const pct = (current - min) / (max - min)
+  if (current <= min) return { ...base, pct, tone: 'low', verdict: 'Lowest price seen' }
+  if (pct <= 1 / 3) return { ...base, pct, tone: 'good', verdict: 'Close to the low' }
+  if (current >= max) return { ...base, pct, tone: 'high', verdict: 'Highest price seen' }
+  if (pct >= 2 / 3) return { ...base, pct, tone: 'high', verdict: 'Higher than usual' }
+  return { ...base, pct, tone: 'mid', verdict: 'About usual' }
+}
+
 // v1 localStorage had no flyer records — group entries by store+date into
 // synthetic flyers so old data becomes per-flyer-deletable after import.
 export function migrateV1(d) {
@@ -349,7 +367,7 @@ export function usePriceBook() {
   // Restore a backup (v2, or v1 which gets migrated). Idempotent: everything
   // upserts, so re-importing the same file adds nothing twice.
   async function importJSON(data) {
-    if (!data || !Array.isArray(data.items)) throw new Error('Not a Price Book backup file')
+    if (!data || !Array.isArray(data.items)) throw new Error('Not a Shelf Check backup file')
     const book = Array.isArray(data.flyers) ? data : migrateV1(data)
 
     if (book.flyers.length) {

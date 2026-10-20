@@ -177,10 +177,8 @@ h2 {
 .field:first-child { flex: 1.4; }
 
 .label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -229,8 +227,6 @@ input:focus {
   flex: none;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   padding: 1px 7px;
   border-radius: 99px;
   white-space: nowrap;
