@@ -68,10 +68,32 @@ async function loadAll() {
 function storeKey(s) {
   return s.replace(/\s+/g, ' ').trim().toLowerCase()
 }
+// Scans also spell one store several ways: "Cost RIGHT", "Cost Right
+// Freeport", "CostRight". Treat a name as the same store when, ignoring case,
+// spaces, and punctuation, it equals the start of the other name up to a word
+// break, so "Cost RIGHT" matches "Cost Right Freeport" but "Max" never
+// matches "Maxi".
+function storeWords(s) {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean)
+}
+function sameStore(a, b) {
+  const [short, long] = [storeWords(a), storeWords(b)].sort((x, y) => x.length - y.length)
+  const target = short.join('')
+  if (!target) return false
+  let joined = ''
+  for (const w of long) {
+    joined += w
+    if (joined === target) return true
+    if (joined.length >= target.length) return false
+  }
+  return false
+}
 export function normalizeStore(name, existingStores = []) {
   const cleaned = (name || '').replace(/\s+/g, ' ').trim()
   const key = cleaned.toLowerCase()
-  return existingStores.find(s => storeKey(s) === key) || cleaned
+  return existingStores.find(s => storeKey(s) === key)
+    || existingStores.find(s => sameStore(s, cleaned))
+    || cleaned
 }
 
 // Sale window state for one entry; null when the flyer had no end date.

@@ -317,6 +317,7 @@ async function onSignOut() {
       :file-name="currentReview.fileName"
       :file="currentReview.file"
       :known-canonicals="knownCanonicals"
+      :stores="stores"
       @save="onReviewSave"
       @discard="onReviewDiscard"
     />

@@ -2,12 +2,14 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import PhotoFixer from './PhotoFixer.vue'
 import { rowBox, cropPhoto } from '../lib/photos.js'
+import { normalizeStore } from '../composables/usePriceBook.js'
 
 const props = defineProps({
   parsed: { type: Object, required: true },
   fileName: { type: String, default: '' },
   file: { type: File, default: null }, // the flyer image, for cutting out item photos
   knownCanonicals: { type: Array, default: () => [] },
+  stores: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['save', 'discard'])
@@ -32,7 +34,7 @@ onBeforeUnmount(dropAllPhotos)
 // Re-seed the form whenever the next flyer in the queue arrives.
 watch(() => props.parsed, (p) => {
   dropAllPhotos()
-  store.value = p.s || ''
+  store.value = normalizeStore(p.s, props.stores)
   startDate.value = p.d || new Date().toISOString().slice(0, 10)
   endDate.value = p.e || ''
   rows.value = (p.i || []).map((r, idx) => ({
@@ -118,7 +120,10 @@ function onKeydown(e) {
         <div class="meta">
           <label class="field">
             <span class="label">Store</span>
-            <input v-model="store" type="text" placeholder="Store name">
+            <input v-model="store" type="text" placeholder="Store name" list="review-stores">
+            <datalist id="review-stores">
+              <option v-for="st in stores" :key="st" :value="st" />
+            </datalist>
           </label>
           <label class="field">
             <span class="label">Sale starts</span>

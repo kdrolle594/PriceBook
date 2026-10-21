@@ -24,13 +24,15 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-function buildPrompt(knownCanonicals: string[]): string {
+function buildPrompt(knownCanonicals: string[], knownStores: string[]): string {
   return `Extract every product and price from this supermarket flyer.
 
 Return ONLY compact JSON, no markdown fences, no commentary, no spaces or newlines:
 {"s":"store name","d":"YYYY-MM-DD","e":"YYYY-MM-DD","i":[["canonical","display","size",price],...]}
 
 Rules:
+- s: store name. If it's one of these stores, reuse that EXACT name even if the flyer words it differently:
+${knownStores.join('\n') || '(none yet)'}
 - d: flyer start date; if unreadable use today
 - e: flyer end date (sale valid through); if unreadable use ""
 - canonical: lowercase brand + product + size, used to match the same item across weeks. If it matches one of these existing canonicals, reuse that EXACT string:
@@ -88,7 +90,10 @@ Deno.serve(async (req) => {
       if (!items.length || !(width > 0) || !(height > 0)) throw new Error('missing items or size')
       prompt = buildPhotosPrompt(items, Math.round(width), Math.round(height))
     } else {
-      prompt = buildPrompt(Array.isArray(body.knownCanonicals) ? body.knownCanonicals : [])
+      // stores come from the book itself, so every app version gets them
+      const { data: flyers } = await supabase.from('flyers').select('store')
+      const knownStores = [...new Set((flyers || []).map((f: { store: string }) => f.store))]
+      prompt = buildPrompt(Array.isArray(body.knownCanonicals) ? body.knownCanonicals : [], knownStores)
     }
   } catch {
     return json({ error: 'Bad request — expected {image, mediaType, knownCanonicals} or {mode: "photos", image, mediaType, items, width, height}' }, 400)

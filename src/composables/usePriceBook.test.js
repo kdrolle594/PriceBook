@@ -36,6 +36,20 @@ describe('normalizeStore', () => {
     expect(normalizeStore('maxi', ['Walmart', 'Maxi'])).toBe('Maxi')
   })
 
+  it('matches a shorter or squashed spelling of an existing store', () => {
+    const known = ['Cost Right', "Solomon's Lucaya & Downtown Stores"]
+    expect(normalizeStore('Cost RIGHT Freeport', known)).toBe('Cost Right')
+    expect(normalizeStore('CostRight', known)).toBe('Cost Right')
+    expect(normalizeStore("Solomon's", known)).toBe("Solomon's Lucaya & Downtown Stores")
+    expect(normalizeStore('Cost RIGHT', ['Cost Right Freeport'])).toBe('Cost Right Freeport')
+  })
+
+  it('prefers an exact match and never matches part of a word', () => {
+    expect(normalizeStore('Super Value', ['Super', 'Super Value'])).toBe('Super Value')
+    expect(normalizeStore('Max', ['Maxi'])).toBe('Max')
+    expect(normalizeStore('Cost', ['Costco'])).toBe('Cost')
+  })
+
   it('keeps genuinely new stores as typed', () => {
     expect(normalizeStore('Metro', ['Walmart'])).toBe('Metro')
     expect(normalizeStore(null, ['Walmart'])).toBe('')
