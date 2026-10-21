@@ -47,8 +47,7 @@ watch(() => props.parsed, (p) => {
   cutPhotos(rows.value)
 }, { immediate: true })
 
-// Cut out any boxes the scan supplied; the current scan prompt asks for none
-// (boxes cost text accuracy), so photos come from the admin drawing them.
+// Cut each scanned box out of the flyer; a bad box just leaves no photo.
 async function cutPhotos(list) {
   if (!props.file) return
   for (const r of list) {
@@ -132,7 +131,7 @@ function onKeydown(e) {
         </div>
 
         <div class="rows">
-          <p v-if="file" class="photo-hint">Tap + to add a photo: drag a box around the product on the flyer. Items keep their photo if you skip this.</p>
+          <p v-if="file" class="photo-hint">Tap a photo to fix it, or + to add one. Scanned photos only fill items without one; photos you fix replace the old one.</p>
           <div v-for="r in rows" :key="r.key" class="item-row">
             <button
               v-if="file"

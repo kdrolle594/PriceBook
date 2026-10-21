@@ -12,12 +12,14 @@ but only admins can scan flyers, edit items, or delete data.
 ## Features
 
 - **Flyer scanning** — drop a photo/screenshot; items, prices, and the sale's
-  start/end dates are extracted automatically (Anthropic API via a Supabase
-  Edge Function — the key never reaches a browser)
-- **Item photos** — during review, drag a box around a product on the flyer to
-  cut out its thumbnail, or pick a photo; swap/remove it later from the item
-  (admins). Asking the scan to find photos itself made names and prices less
-  accurate, so it doesn't.
+  start/end dates are extracted automatically (Claude Sonnet 5.5 for prices,
+  Claude Opus 5.5 for photo boxes, via a Supabase Edge Function — the key never
+  reaches a browser). About 6¢ per flyer.
+- **Item photos** — after reading prices, a second scan finds each product's
+  picture on the flyer and cuts it out as a thumbnail. Fix a bad crop during
+  review by dragging a new box, or swap/remove a photo later from the item
+  (admins). It's a separate pass because asking one scan for both made names
+  and prices less accurate.
 - **Review before saving** — fix names, prices, dates, and photos or discard the
   flyer before anything enters the book
 - **Flyer log** — every scan is listed and can be deleted along with all the
@@ -36,6 +38,7 @@ but only admins can scan flyers, edit items, or delete data.
 
 Existing projects: run `supabase/upgrades/2026-10-21-item-photos.sql` in the
 SQL editor (adds `items.photo_path` and the public `item-photos` storage
-bucket with admin-only writes). A photo added during review replaces the
-item's old one.
+bucket with admin-only writes), then redeploy the scan function:
+`supabase functions deploy extract-flyer`. Scanned photos only fill items
+that have none; a photo fixed by hand during review replaces the old one.
 

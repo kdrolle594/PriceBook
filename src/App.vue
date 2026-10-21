@@ -102,11 +102,11 @@ async function onFiles(files) {
   const errors = []
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
-    progress.value = files.length > 1
-      ? `Reading flyer ${i + 1} of ${files.length}…`
-      : `Reading ${file.name}…`
+    const which = files.length > 1 ? ` (flyer ${i + 1} of ${files.length})` : ''
     try {
-      const parsed = await extractFlyer(file, knownCanonicals.value)
+      const parsed = await extractFlyer(file, knownCanonicals.value, step => {
+        progress.value = step === 'photos' ? `Finding product photos${which}…` : `Reading prices${which}…`
+      })
       pendingReviews.value.push({ fileName: file.name, file, parsed })
     } catch (err) {
       errors.push(`${file.name}: ${err.message}`)
