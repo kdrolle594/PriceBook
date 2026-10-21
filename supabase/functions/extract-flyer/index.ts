@@ -1,5 +1,12 @@
-// Extract prices from a flyer image. Runs server-side so the Anthropic key
-// never reaches a browser. Admin-only via the same is_admin() the RLS uses.
+// Read a flyer image. Runs server-side so the Anthropic key never reaches a
+// browser. Admin-only via the same is_admin() the RLS uses.
+//
+// Two passes, called one after the other by the app:
+//   mode "items"  — every product, size, and price (Sonnet 5.5, reads the
+//                   flyer at full resolution)
+//   mode "photos" — a box around each listed product's picture (Opus 5.5,
+//                   most accurate at locating things). Kept separate because
+//                   asking one pass for both made names and prices worse.
 //
 // Deploy:  supabase functions deploy extract-flyer
 // Secret:  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
@@ -17,13 +24,15 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-function buildPrompt(knownCanonicals: string[]): string {
+function buildPrompt(knownCanonicals: string[], knownStores: string[]): string {
   return `Extract every product and price from this supermarket flyer.
 
 Return ONLY compact JSON, no markdown fences, no commentary, no spaces or newlines:
-{"s":"store name","d":"YYYY-MM-DD","e":"YYYY-MM-DD","i":[["canonical","display","size",price,x1,y1,x2,y2],...]}
+{"s":"store name","d":"YYYY-MM-DD","e":"YYYY-MM-DD","i":[["canonical","display","size",price],...]}
 
 Rules:
+- s: store name. If it's one of these stores, reuse that EXACT name even if the flyer words it differently:
+${knownStores.join('\n') || '(none yet)'}
 - d: flyer start date; if unreadable use today
 - e: flyer end date (sale valid through); if unreadable use ""
 - canonical: lowercase brand + product + size, used to match the same item across weeks. If it matches one of these existing canonicals, reuse that EXACT string:
@@ -31,9 +40,22 @@ ${knownCanonicals.join('\n') || '(none yet)'}
 - display: short readable name (brand + product)
 - size: package size as printed (e.g. "4lbs", "12oz")
 - price: bare number like 5.00 — never a $ sign, never quotes. For "2 for $3.00" style, use per-unit price (1.50). Skip unreadable prices.
-- x1,y1,x2,y2: box around the item's product photo, as whole numbers 0-1000 where 0,0 is the image's top-left and 1000,1000 its bottom-right (fractions of width and height, not pixels). Box the product picture only, not the price or text. If the item has no photo, end the row after price.
 - Include every item. Keep strings short.`
 }
+
+function buildPhotosPrompt(items: string[], width: number, height: number): string {
+  return `This is a supermarket flyer. These products are advertised on it:
+${items.map((n, i) => `${i}: ${n}`).join('\n')}
+
+For each product, find its product picture on the flyer and give a tight box around that picture only — not the price tag, name text, or the surrounding panel.
+
+Coordinates are pixels in this ${width}x${height} image, origin top-left.
+
+Return ONLY compact JSON, no fences or commentary: [[index,x1,y1,x2,y2],...]
+Leave out any product whose picture you can't find.`
+}
+
+const MODELS = { items: 'claude-sonnet-5-5', photos: 'claude-opus-5-5' }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -54,15 +76,27 @@ Deno.serve(async (req) => {
     return json({ error: 'ANTHROPIC_API_KEY secret is not set — run: supabase secrets set ANTHROPIC_API_KEY=…' }, 500)
   }
 
-  let image: string, mediaType: string, knownCanonicals: string[]
+  let image: string, mediaType: string, prompt: string, mode: 'items' | 'photos'
   try {
     const body = await req.json()
     image = body.image
     mediaType = body.mediaType || 'image/png'
-    knownCanonicals = Array.isArray(body.knownCanonicals) ? body.knownCanonicals : []
+    mode = body.mode === 'photos' ? 'photos' : 'items'
     if (!image) throw new Error('missing image')
+    if (mode === 'photos') {
+      const items = Array.isArray(body.items) ? body.items.map(String) : []
+      const width = Number(body.width)
+      const height = Number(body.height)
+      if (!items.length || !(width > 0) || !(height > 0)) throw new Error('missing items or size')
+      prompt = buildPhotosPrompt(items, Math.round(width), Math.round(height))
+    } else {
+      // stores come from the book itself, so every app version gets them
+      const { data: flyers } = await supabase.from('flyers').select('store')
+      const knownStores = [...new Set((flyers || []).map((f: { store: string }) => f.store))]
+      prompt = buildPrompt(Array.isArray(body.knownCanonicals) ? body.knownCanonicals : [], knownStores)
+    }
   } catch {
-    return json({ error: 'Bad request — expected {image, mediaType, knownCanonicals}' }, 400)
+    return json({ error: 'Bad request — expected {image, mediaType, knownCanonicals} or {mode: "photos", image, mediaType, items, width, height}' }, 400)
   }
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -70,16 +104,20 @@ Deno.serve(async (req) => {
     headers: {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
+      // a declined request is retried on Anthropic's recommended model
+      'anthropic-beta': 'server-side-fallback-2026-07-01',
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      model: MODELS[mode],
+      max_tokens: 16000,
+      output_config: { effort: 'medium' },
+      fallbacks: 'default',
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-          { type: 'text', text: buildPrompt(knownCanonicals) },
+          { type: 'text', text: prompt },
         ],
       }],
     }),
@@ -95,6 +133,9 @@ Deno.serve(async (req) => {
   }
 
   const data = await resp.json()
+  if (data.stop_reason === 'refusal') {
+    return json({ error: 'The scan was declined. Try a clearer photo of the flyer.' }, 502)
+  }
   const text = (data.content || [])
     .filter((b: { type: string }) => b.type === 'text')
     .map((b: { text: string }) => b.text)
