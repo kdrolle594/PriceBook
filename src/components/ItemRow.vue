@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import DealMeter from './DealMeter.vue'
 import { usePriceBook, shelfCheck } from '../composables/usePriceBook.js'
 import { useCart } from '../composables/useCart.js'
+import { photoUrl } from '../lib/photos.js'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -19,6 +20,7 @@ const carted = computed(() => inCart(props.item.id))
 const current = computed(() => latest(props.item))
 const check = computed(() => shelfCheck(props.item))
 const sale = computed(() => validity(current.value))
+const photo = computed(() => photoUrl(props.item.photoPath))
 
 function fmtDate(iso) {
   const d = new Date(iso + 'T00:00:00')
@@ -30,6 +32,11 @@ function fmtDate(iso) {
 <template>
   <li class="row" :class="{ selected }">
     <button class="row-main" :aria-current="selected ? 'true' : undefined" @click="emit('open', item)">
+      <span class="photo" :class="{ none: !photo }" aria-hidden="true">
+        <img v-if="photo" :src="photo" alt="" loading="lazy">
+        <template v-else>{{ item.display.charAt(0) }}</template>
+      </span>
+      <span class="body">
       <span class="line">
         <span class="name">{{ item.display }}</span>
         <span class="price price-num" :class="`tone-${check.tone}`">${{ current.price.toFixed(2) }}</span>
@@ -44,7 +51,8 @@ function fmtDate(iso) {
         <DealMeter :check="check" />
         <span class="verdict" :class="`tone-${check.tone}`">{{ check.verdict }}</span>
       </span>
-      <span v-else class="line check first">First price seen. The shelf check starts with the next one.</span>
+      <span v-else class="line check first">First price seen, no history yet</span>
+      </span>
     </button>
 
     <button
@@ -77,10 +85,41 @@ function fmtDate(iso) {
   flex: 1;
   min-width: 0;
   display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 8px 14px 14px;
+  text-align: left;
+}
+
+.photo {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff; /* product shots are cut from white-paper flyers */
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  display: grid;
+  place-items: center;
+}
+
+.photo img { width: 100%; height: 100%; object-fit: contain; }
+
+.photo.none {
+  background: var(--sunken);
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 14px 8px 14px 16px;
-  text-align: left;
 }
 
 .row-main:hover .name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hairline-strong); }
@@ -178,5 +217,7 @@ function fmtDate(iso) {
 
 @media (max-width: 420px) {
   .check :deep(.meter .end) { display: none; }
+  .photo { width: 48px; height: 48px; }
+  .row-main { gap: 10px; }
 }
 </style>

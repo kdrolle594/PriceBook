@@ -3,6 +3,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import PriceChart from './PriceChart.vue'
 import AddPriceForm from './AddPriceForm.vue'
 import DealMeter from './DealMeter.vue'
+import PhotoFixer from './PhotoFixer.vue'
+import { photoUrl } from '../lib/photos.js'
 import { usePriceBook, shelfCheck } from '../composables/usePriceBook.js'
 
 const props = defineProps({
@@ -16,7 +18,21 @@ const emit = defineEmits(['close'])
 const {
   items, stores, sortedHist, minPrice, validity,
   updateItem, deleteItem, updateEntry, deleteEntry, mergeItems,
+  setItemPhoto, removeItemPhoto,
 } = usePriceBook()
+
+const photo = computed(() => photoUrl(props.item.photoPath))
+const fixingPhoto = ref(false)
+
+function onPhotoUse({ blob }) {
+  fixingPhoto.value = false
+  run(() => setItemPhoto(props.item, blob), 'Photo saved')
+}
+
+function onPhotoNone() {
+  fixingPhoto.value = false
+  if (props.item.photoPath) run(() => removeItemPhoto(props.item), 'Photo removed')
+}
 
 const err = ref('')
 const notice = ref('')
@@ -117,7 +133,8 @@ function onKeydown(e) {
         :aria-label="item.display"
       >
         <header class="card-head">
-          <div>
+          <img v-if="photo" class="photo" :src="photo" alt="">
+          <div class="title">
             <h2>{{ item.display }}</h2>
             <p v-if="item.size" class="sub">{{ item.size }}</p>
           </div>
@@ -187,6 +204,14 @@ function onKeydown(e) {
             </section>
 
             <section class="tool">
+              <h3 class="label">Photo</h3>
+              <p class="hint">
+                {{ photo ? 'Wrong picture? Swap it for another or remove it.' : 'No photo yet. Add one from your phone or computer.' }}
+              </p>
+              <button class="ghost solid" @click="fixingPhoto = true">{{ photo ? 'Change photo' : 'Add photo' }}</button>
+            </section>
+
+            <section class="tool">
               <h3 class="label">Edit item</h3>
               <div class="edit-row">
                 <input v-model="draftName" class="f-name" type="text" aria-label="Item name">
@@ -222,6 +247,14 @@ function onKeydown(e) {
       </div>
     </div>
   </Teleport>
+
+  <PhotoFixer
+    v-if="fixingPhoto"
+    :name="item.display"
+    @use="onPhotoUse"
+    @none="onPhotoNone"
+    @cancel="fixingPhoto = false"
+  />
 </template>
 
 <style scoped>
@@ -323,10 +356,21 @@ function onKeydown(e) {
 .card-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 14px;
 }
+
+.photo {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.title { flex: 1; min-width: 0; }
 
 h2 {
   font-family: var(--font-display);

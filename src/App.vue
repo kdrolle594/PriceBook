@@ -107,7 +107,7 @@ async function onFiles(files) {
       : `Reading ${file.name}…`
     try {
       const parsed = await extractFlyer(file, knownCanonicals.value)
-      pendingReviews.value.push({ fileName: file.name, parsed })
+      pendingReviews.value.push({ fileName: file.name, file, parsed })
     } catch (err) {
       errors.push(`${file.name}: ${err.message}`)
     }
@@ -119,8 +119,10 @@ async function onFiles(files) {
 
 async function onReviewSave(edited) {
   try {
-    const { added, updated } = await mergeFlyer(edited)
+    const { added, updated, photos, photoErrors } = await mergeFlyer(edited)
     status.value = `${edited.s}: ${added} new, ${updated} updated`
+      + (photos ? `, ${photos} photo${photos === 1 ? '' : 's'} saved` : '')
+      + (photoErrors ? `. ${photoErrors} photo${photoErrors === 1 ? '' : 's'} failed to upload; add them from the item.` : '')
     isErr.value = false
     pendingReviews.value.shift()
   } catch (err) {
@@ -313,6 +315,7 @@ async function onSignOut() {
       v-if="currentReview"
       :parsed="currentReview.parsed"
       :file-name="currentReview.fileName"
+      :file="currentReview.file"
       :known-canonicals="knownCanonicals"
       @save="onReviewSave"
       @discard="onReviewDiscard"

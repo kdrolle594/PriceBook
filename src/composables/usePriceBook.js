@@ -1,10 +1,11 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../lib/supabase.js'
+import { uploadPhoto, deletePhoto } from '../lib/photos.js'
 
 // Pre-Supabase localStorage keys — kept readable so old data can be migrated.
 const LOCAL_KEYS = ['pricebook-v2', 'pricebook-v1']
 
-// items:  [{id, canonical, display, size, history: [{id, flyerId, store, date, endDate, price}]}]
+// items:  [{id, canonical, display, size, photoPath, history: [{id, flyerId, store, date, endDate, price}]}]
 // flyers: [{id, store, startDate, endDate, itemCount, createdAt}]
 const items = ref([])
 const flyers = ref([])
@@ -33,6 +34,7 @@ async function loadAll() {
       canonical: r.canonical,
       display: r.display,
       size: r.size,
+      photoPath: r.photo_path || null,
       history: [],
     }]))
     for (const r of pe.data) {
@@ -218,8 +220,10 @@ export function usePriceBook() {
     return ((hist[0].price - hist[1].price) / hist[1].price) * 100
   }
 
-  // Merge one reviewed flyer ({s: store, d: start, e: end, i: rows}) into the book.
-  // Returns {added, updated}.
+  // Merge one reviewed flyer ({s: store, d: start, e: end, i: rows, photos}) into
+  // the book. photos maps canonical → {blob, fixed}; a scanned photo only fills
+  // an item that has none, a photo the admin fixed by hand always replaces.
+  // Returns {added, updated, photos, photoErrors}.
   async function mergeFlyer(parsed) {
     // Dedupe rows by canonical — the unique index rejects double-hits otherwise
     const seen = new Set()
@@ -227,7 +231,7 @@ export function usePriceBook() {
       .map(r => ({ canonical: r[0], display: r[1], size: r[2], price: Number(r[3]) }))
       .filter(p => p.canonical && p.price > 0)
       .filter(p => !seen.has(p.canonical) && seen.add(p.canonical))
-    if (!rows.length) return { added: 0, updated: 0 }
+    if (!rows.length) return { added: 0, updated: 0, photos: 0, photoErrors: 0 }
 
     const store = normalizeStore(parsed.s, stores.value) || 'Unknown'
     const startDate = parsed.d || today()
@@ -247,10 +251,11 @@ export function usePriceBook() {
     // Match rows to existing items by canonical; create the rest
     const canonicals = rows.map(r => r.canonical)
     const { data: existing } = await supabase.from('items')
-      .select('id, canonical')
+      .select('id, canonical, photo_path')
       .in('canonical', canonicals)
       .throwOnError()
     const idByCanonical = new Map(existing.map(e => [e.canonical, e.id]))
+    const photoByCanonical = new Map(existing.map(e => [e.canonical, e.photo_path]))
 
     const newRows = rows.filter(r => !idByCanonical.has(r.canonical))
     if (newRows.length) {
@@ -290,9 +295,24 @@ export function usePriceBook() {
       .eq('id', flyer.id)
       .throwOnError()
 
+    // Photos are extras: a failed upload never loses the flyer's prices.
+    let photos = 0
+    let photoErrors = 0
+    for (const [canonical, photo] of Object.entries(parsed.photos || {})) {
+      const itemId = idByCanonical.get(canonical)
+      const old = photoByCanonical.get(canonical)
+      if (!itemId || !photo?.blob || (old && !photo.fixed)) continue
+      try {
+        await savePhoto(itemId, old, photo.blob)
+        photos++
+      } catch {
+        photoErrors++
+      }
+    }
+
     await loadAll()
     const added = newRows.length
-    return { added, updated: inserted.length - added }
+    return { added, updated: inserted.length - added, photos, photoErrors }
   }
 
   // Remove one flyer and every price it contributed; the delete_flyer RPC
@@ -308,7 +328,27 @@ export function usePriceBook() {
   }
 
   async function deleteItem(id) {
+    const path = items.value.find(i => i.id === id)?.photoPath
     await supabase.from('items').delete().eq('id', id).throwOnError()
+    await deletePhoto(path).catch(() => {}) // a leftover file is harmless
+    await loadAll()
+  }
+
+  // Upload, point the item at it, then drop the old file.
+  async function savePhoto(itemId, oldPath, blob) {
+    const path = await uploadPhoto(itemId, blob)
+    await supabase.from('items').update({ photo_path: path }).eq('id', itemId).throwOnError()
+    await deletePhoto(oldPath).catch(() => {})
+  }
+
+  async function setItemPhoto(item, blob) {
+    await savePhoto(item.id, item.photoPath, blob)
+    await loadAll()
+  }
+
+  async function removeItemPhoto(item) {
+    await supabase.from('items').update({ photo_path: null }).eq('id', item.id).throwOnError()
+    await deletePhoto(item.photoPath).catch(() => {})
     await loadAll()
   }
 
@@ -435,5 +475,6 @@ export function usePriceBook() {
     sortedHist, latest, minPrice, isDeal, deltaPct, validity,
     loadAll, mergeFlyer, deleteFlyer, exportJSON, importJSON, localBackup, clearAll,
     updateItem, deleteItem, updateEntry, deleteEntry, mergeItems, addManualPrice,
+    setItemPhoto, removeItemPhoto,
   }
 }
