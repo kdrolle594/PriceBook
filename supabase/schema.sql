@@ -101,9 +101,13 @@ end $$;
 
 -- item photos: public bucket (anyone can view), admin-only uploads
 insert into storage.buckets (id, name, public) values ('item-photos', 'item-photos', true);
+-- storage's delete/replace calls look rows up first, so admins need select too
+create policy "item photos admin select" on storage.objects for select to authenticated
+  using (bucket_id = 'item-photos' and public.is_admin());
 create policy "item photos admin insert" on storage.objects for insert to authenticated
   with check (bucket_id = 'item-photos' and public.is_admin());
 create policy "item photos admin update" on storage.objects for update to authenticated
-  using (bucket_id = 'item-photos' and public.is_admin());
+  using (bucket_id = 'item-photos' and public.is_admin())
+  with check (bucket_id = 'item-photos' and public.is_admin());
 create policy "item photos admin delete" on storage.objects for delete to authenticated
   using (bucket_id = 'item-photos' and public.is_admin());
