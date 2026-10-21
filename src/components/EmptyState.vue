@@ -16,13 +16,13 @@ defineProps({
     <template v-else>
       <p class="empty-title">No prices yet</p>
       <p class="empty-body">
-        Upload this week's flyer to start your price book.
-        After two or more flyers you'll see which "sales" are actually the lowest price.
+        Scan this week's flyer to start. After two or more flyers, every item
+        gets a shelf check that shows whether its "sale" is really the lowest price.
       </p>
       <ol class="steps">
-        <li><span class="mono step-n">1</span> Snap or screenshot a flyer</li>
-        <li><span class="mono step-n">2</span> Drop it above — prices are extracted</li>
-        <li><span class="mono step-n">3</span> Watch for the <span class="low-word">historic low</span> tag</li>
+        <li><span class="step-n">1</span> Snap or screenshot a flyer</li>
+        <li><span class="step-n">2</span> Tap Scan flyer and check the prices it read</li>
+        <li><span class="step-n">3</span> Look for <span class="low-word">Lowest price seen</span> on the shelf check</li>
       </ol>
     </template>
   </div>

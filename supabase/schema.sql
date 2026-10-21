@@ -1,4 +1,4 @@
--- Price Book schema — run once in the Supabase SQL editor.
+-- Shelf Check schema — run once in the Supabase SQL editor.
 -- After signing up in the app, flag your account as admin:
 --   update public.profiles set is_admin = true where email = 'you@example.com';
 
@@ -24,6 +24,7 @@ create table public.items (
   canonical text not null unique,
   display text not null,
   size text not null default '',
+  photo_path text, -- object in the item-photos bucket; null = no photo
   created_at timestamptz not null default now()
 );
 
@@ -91,5 +92,22 @@ begin
     where pe.item_id = source and t.item_id = target
       and t.store = pe.store and t.start_date = pe.start_date;
   update public.price_entries set item_id = target where item_id = source;
+  -- target keeps its own photo; inherits the source's when it has none
+  update public.items t set photo_path = s.photo_path
+    from public.items s
+    where t.id = target and s.id = source and t.photo_path is null;
   delete from public.items where id = source;
 end $$;
+
+-- item photos: public bucket (anyone can view), admin-only uploads
+insert into storage.buckets (id, name, public) values ('item-photos', 'item-photos', true);
+-- storage's delete/replace calls look rows up first, so admins need select too
+create policy "item photos admin select" on storage.objects for select to authenticated
+  using (bucket_id = 'item-photos' and public.is_admin());
+create policy "item photos admin insert" on storage.objects for insert to authenticated
+  with check (bucket_id = 'item-photos' and public.is_admin());
+create policy "item photos admin update" on storage.objects for update to authenticated
+  using (bucket_id = 'item-photos' and public.is_admin())
+  with check (bucket_id = 'item-photos' and public.is_admin());
+create policy "item photos admin delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'item-photos' and public.is_admin());

@@ -1,12 +1,16 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import PriceChart from './PriceChart.vue'
 import AddPriceForm from './AddPriceForm.vue'
-import { usePriceBook } from '../composables/usePriceBook.js'
+import DealMeter from './DealMeter.vue'
+import PhotoFixer from './PhotoFixer.vue'
+import { photoUrl } from '../lib/photos.js'
+import { usePriceBook, shelfCheck } from '../composables/usePriceBook.js'
 
 const props = defineProps({
   item: { type: Object, required: true },
   isAdmin: { type: Boolean, default: false },
+  docked: { type: Boolean, default: false }, // desktop side panel instead of a sheet
 })
 
 const emit = defineEmits(['close'])
@@ -14,13 +18,32 @@ const emit = defineEmits(['close'])
 const {
   items, stores, sortedHist, minPrice, validity,
   updateItem, deleteItem, updateEntry, deleteEntry, mergeItems,
+  setItemPhoto, removeItemPhoto,
 } = usePriceBook()
+
+const photo = computed(() => photoUrl(props.item.photoPath))
+const fixingPhoto = ref(false)
+
+function onPhotoUse({ blob }) {
+  fixingPhoto.value = false
+  run(() => setItemPhoto(props.item, blob), 'Photo saved')
+}
+
+function onPhotoNone() {
+  fixingPhoto.value = false
+  if (props.item.photoPath) run(() => removeItemPhoto(props.item), 'Photo removed')
+}
 
 const err = ref('')
 const notice = ref('')
 
 const hist = computed(() => sortedHist(props.item))
 const min = computed(() => minPrice(props.item))
+const check = computed(() => shelfCheck(props.item))
+const firstSeen = computed(() => hist.value[hist.value.length - 1].date)
+
+const closeBtn = ref(null)
+onMounted(() => { if (!props.docked) closeBtn.value?.focus() })
 
 // edit form state
 const draftName = ref(props.item.display)
@@ -101,23 +124,43 @@ function onKeydown(e) {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="scrim" @click.self="emit('close')" @keydown="onKeydown">
-      <div class="card" role="dialog" aria-modal="true" :aria-label="item.display">
+  <Teleport to="body" :disabled="docked">
+    <div class="scrim" :class="{ docked }" @click.self="emit('close')" @keydown="onKeydown">
+      <div
+        class="card"
+        :role="docked ? 'region' : 'dialog'"
+        :aria-modal="docked ? undefined : 'true'"
+        :aria-label="item.display"
+      >
         <header class="card-head">
-          <div>
+          <img v-if="photo" class="photo" :src="photo" alt="">
+          <div class="title">
             <h2>{{ item.display }}</h2>
-            <p v-if="item.size" class="sub mono">{{ item.size }}</p>
+            <p v-if="item.size" class="sub">{{ item.size }}</p>
           </div>
-          <button class="close" aria-label="Close" @click="emit('close')">✕</button>
+          <button ref="closeBtn" class="close" aria-label="Close" @click="emit('close')">✕</button>
         </header>
 
         <div class="body">
+          <section class="check" :class="`tone-${check.tone}`">
+            <div class="check-top">
+              <span class="check-price price-num">${{ check.current.toFixed(2) }}</span>
+              <span class="check-verdict">{{ check.verdict }}</span>
+            </div>
+            <template v-if="check.count > 1">
+              <DealMeter :check="check" large />
+              <p class="check-note">
+                Shelf check across {{ check.count }} prices seen since {{ fmtDate(firstSeen) }}.
+              </p>
+            </template>
+            <p v-else class="check-note">Only one price so far. The shelf check fills in after the next flyer.</p>
+          </section>
+
           <PriceChart v-if="item.history.length > 1" :history="item.history" />
 
           <div class="hist">
             <div v-for="h in hist" :key="h.id" class="hist-line">
-              <span class="hist-when mono">
+              <span class="hist-when">
                 {{ fmtDate(h.date) }}<template v-if="h.endDate"> – {{ fmtDate(h.endDate) }}</template>
               </span>
               <span class="hist-store">
@@ -151,7 +194,7 @@ function onKeydown(e) {
 
           <template v-if="isAdmin">
             <section class="tool">
-              <span class="label">Add a price</span>
+              <h3 class="label">Add a price</h3>
               <AddPriceForm
                 :item="item"
                 :stores="stores"
@@ -161,7 +204,15 @@ function onKeydown(e) {
             </section>
 
             <section class="tool">
-              <span class="label">Edit item</span>
+              <h3 class="label">Photo</h3>
+              <p class="hint">
+                {{ photo ? 'Wrong picture? Swap it for another or remove it.' : 'No photo yet. Add one from your phone or computer.' }}
+              </p>
+              <button class="ghost solid" @click="fixingPhoto = true">{{ photo ? 'Change photo' : 'Add photo' }}</button>
+            </section>
+
+            <section class="tool">
+              <h3 class="label">Edit item</h3>
               <div class="edit-row">
                 <input v-model="draftName" class="f-name" type="text" aria-label="Item name">
                 <input v-model="draftSize" class="f-size" type="text" placeholder="size" aria-label="Size">
@@ -170,7 +221,7 @@ function onKeydown(e) {
             </section>
 
             <section class="tool">
-              <span class="label">Merge duplicate</span>
+              <h3 class="label">Merge a duplicate</h3>
               <p class="hint">Moves every price into the item below, then removes this one.</p>
               <div class="edit-row">
                 <select v-model="mergeTarget" aria-label="Merge into item" @change="confirmMerge = false">
@@ -196,6 +247,14 @@ function onKeydown(e) {
       </div>
     </div>
   </Teleport>
+
+  <PhotoFixer
+    v-if="fixingPhoto"
+    :name="item.display"
+    @use="onPhotoUse"
+    @none="onPhotoNone"
+    @cancel="fixingPhoto = false"
+  />
 </template>
 
 <style scoped>
@@ -205,40 +264,120 @@ function onKeydown(e) {
   background: var(--scrim);
   z-index: 55;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: 16px;
+  padding-top: 32px;
   animation: fade 0.18s ease;
 }
 
 @keyframes fade { from { opacity: 0; } }
 
+/* phones: a sheet that slides up from the tab bar */
 .card {
   width: min(620px, 100%);
-  max-height: min(760px, 100%);
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  padding: 20px 22px;
-  animation: rise 0.22s ease;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+  animation: rise 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@keyframes rise { from { transform: translateY(10px); opacity: 0; } }
+.card::before {
+  content: "";
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--hairline-strong);
+  margin-bottom: 12px;
+}
+
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } }
+
+/* desktop: docked beside the list */
+.scrim.docked {
+  position: static;
+  background: none;
+  padding: 0;
+  display: block;
+  animation: none;
+}
+
+.docked .card {
+  width: 100%;
+  max-height: calc(100dvh - 116px);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: 0 0 0 1px var(--hairline);
+  animation: none;
+}
+
+.docked .card::before { display: none; }
+
+.check {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--bg);
+}
+
+.check-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.check-price {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.check-verdict {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.tone-low .check-price, .tone-low .check-verdict, .tone-good .check-verdict { color: var(--low); }
+.tone-high .check-verdict { color: var(--high); }
+
+.check-note {
+  font-size: 13px;
+  color: var(--muted);
+}
 
 .card-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 14px;
 }
 
+.photo {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.title { flex: 1; min-width: 0; }
+
 h2 {
   font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
 }
 
 .sub {
@@ -254,7 +393,7 @@ h2 {
   border-radius: var(--radius-sm);
 }
 
-.close:hover { color: var(--ink); background: var(--surface); }
+.close:hover { color: var(--ink); background: var(--sunken); }
 
 .body {
   flex: 1;
@@ -286,6 +425,7 @@ h2 {
   font-size: 12px;
   min-width: 64px;
   flex: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .hist-store {
@@ -309,7 +449,7 @@ h2 {
   width: 82px;
   text-align: right;
   padding: 4px 8px;
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -346,11 +486,9 @@ h2 {
 }
 
 .label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .hint {
@@ -365,7 +503,7 @@ h2 {
 
 .edit-row input, .edit-row select {
   padding: 8px 10px;
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -391,11 +529,11 @@ select { flex: 1; }
   border-radius: var(--radius-sm);
 }
 
-.ghost:hover { color: var(--ink); background: var(--surface); }
+.ghost:hover { color: var(--ink); background: var(--bg); }
 
 .ghost.solid {
   color: var(--ink);
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--hairline);
   font-weight: 600;
   flex: none;

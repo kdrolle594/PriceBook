@@ -3,8 +3,6 @@ import { computed } from 'vue'
 import { usePriceBook, bestOffer, validity } from '../composables/usePriceBook.js'
 import { useCart } from '../composables/useCart.js'
 
-const emit = defineEmits(['back'])
-
 const { items } = usePriceBook()
 const { lines, count, setQty, remove, clear } = useCart()
 
@@ -37,7 +35,7 @@ const total = computed(() => resolved.value.reduce((n, l) => n + l.lineTotal, 0)
 function saleNote(line) {
   if (line.onSale) {
     const v = validity(line.entry)
-    return v ? `on sale · ${v.label}` : 'on sale'
+    return v ? `on sale, ${v.label}` : 'on sale'
   }
   const d = new Date(line.entry.date + 'T00:00:00')
   const seen = isNaN(d) ? line.entry.date : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -48,20 +46,18 @@ function saleNote(line) {
 <template>
   <section class="cart">
     <div class="cart-head">
-      <button class="back" @click="emit('back')">‹ Back to prices</button>
+      <h2>Shopping list</h2>
       <button v-if="resolved.length" class="clear" @click="clear">Clear list</button>
     </div>
-
-    <h2>Shopping list</h2>
     <p v-if="resolved.length" class="sub">
-      {{ count }} item{{ count === 1 ? '' : 's' }} · priced at each item's best current offer
+      {{ count }} item{{ count === 1 ? '' : 's' }}, each priced at its best current offer
     </p>
 
     <div v-if="resolved.length" class="groups">
       <div v-for="g in byStore" :key="g.store" class="group">
         <header class="group-head">
           <h3>{{ g.store }}</h3>
-          <span class="mono subtotal">${{ g.subtotal.toFixed(2) }}</span>
+          <span class="price-num subtotal">${{ g.subtotal.toFixed(2) }}</span>
         </header>
 
         <ul>
@@ -69,8 +65,8 @@ function saleNote(line) {
             <div class="line-id">
               <span class="line-name">{{ line.item.display }}</span>
               <span class="line-meta">
-                <span v-if="line.item.size">{{ line.item.size }} · </span>
-                <span class="mono">${{ line.entry.price.toFixed(2) }}</span> ·
+                <span v-if="line.item.size">{{ line.item.size }}, </span>
+                <span class="mono">${{ line.entry.price.toFixed(2) }}</span> each,
                 <span :class="{ sale: line.onSale }">{{ saleNote(line) }}</span>
               </span>
             </div>
@@ -81,7 +77,7 @@ function saleNote(line) {
               <button class="step" :aria-label="`One more ${line.item.display}`" @click="setQty(line.item.id, line.qty + 1)">+</button>
             </div>
 
-            <span class="mono line-total">${{ line.lineTotal.toFixed(2) }}</span>
+            <span class="price-num line-total">${{ line.lineTotal.toFixed(2) }}</span>
 
             <button class="remove" :aria-label="`Remove ${line.item.display} from list`" @click="remove(line.item.id)">✕</button>
           </li>
@@ -90,12 +86,12 @@ function saleNote(line) {
 
       <footer class="total-row">
         <span>Estimated total</span>
-        <span class="mono total">${{ total.toFixed(2) }}</span>
+        <span class="price-num total">${{ total.toFixed(2) }}</span>
       </footer>
     </div>
 
     <p v-else class="empty">
-      Your list is empty — tap the + on any item to add it here.
+      Your list is empty. Tap + on any item to add it.
     </p>
   </section>
 </template>
@@ -111,18 +107,7 @@ function saleNote(line) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
 }
-
-.back {
-  font-size: 13px;
-  color: var(--muted);
-  padding: 6px 8px;
-  margin-left: -8px;
-  border-radius: var(--radius-sm);
-}
-
-.back:hover { color: var(--ink); background: var(--surface); }
 
 .clear {
   font-size: 12.5px;
@@ -135,7 +120,7 @@ function saleNote(line) {
 
 h2 {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
@@ -152,18 +137,25 @@ h2 {
   margin-top: 12px;
 }
 
+.group {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--hairline);
+  padding: 4px 16px;
+}
+
 .group-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--hairline-strong);
+  padding: 12px 0 8px;
+  border-bottom: 1px solid var(--hairline);
 }
 
 h3 {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -179,9 +171,10 @@ ul { list-style: none; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--hairline);
+  padding: 12px 0;
 }
+
+.line + .line { border-top: 1px solid var(--hairline); }
 
 .line-id {
   flex: 1;
@@ -213,22 +206,22 @@ ul { list-style: none; }
   display: flex;
   align-items: center;
   gap: 2px;
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--hairline);
   border-radius: 99px;
-  padding: 2px;
+  padding: 3px;
 }
 
 .step {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   color: var(--muted);
   font-size: 14px;
   line-height: 1;
 }
 
-.step:hover { color: var(--ink); background: var(--bg); }
+.step:hover { color: var(--ink); background: var(--sunken); }
 
 .qty-n {
   min-width: 20px;
@@ -259,16 +252,13 @@ ul { list-style: none; }
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding-top: 12px;
-  border-top: 2px solid var(--ink);
+  padding: 4px 4px 0;
   font-weight: 600;
 }
 
 .total {
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 30px;
 }
 
 .empty {

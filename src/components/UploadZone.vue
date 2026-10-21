@@ -15,6 +15,8 @@ function pick() {
   if (!props.busy) input.value?.click()
 }
 
+defineExpose({ pick })
+
 function onChange(e) {
   const files = [...e.target.files]
   e.target.value = ''
@@ -52,11 +54,11 @@ function onDrop(e) {
         <span class="pulse" aria-hidden="true"></span>
         {{ progress || 'Reading flyer…' }}
       </span>
-      <span class="drop-sub">Extracting prices — this takes a few seconds</span>
+      <span class="drop-sub">Reading prices. This takes a few seconds.</span>
     </template>
     <template v-else>
-      <span class="drop-title">+ Drop this week's flyer</span>
-      <span class="drop-sub">Photo or screenshot — prices are extracted automatically</span>
+      <span class="drop-title">Scan this week's flyer</span>
+      <span class="drop-sub">Drop a photo or screenshot here, or click to pick one. Prices are read automatically.</span>
     </template>
   </button>
 </template>
@@ -68,9 +70,9 @@ function onDrop(e) {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 26px 20px;
+  padding: 22px 20px;
   background: var(--surface);
-  border: 1.5px dashed var(--hairline-strong);
+  border: 2px dashed var(--hairline-strong);
   border-radius: var(--radius);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -92,8 +94,9 @@ function onDrop(e) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
-  font-size: 15px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
 }
 
 .drop-sub {

@@ -31,7 +31,7 @@ function onDelete(id) {
   <section v-if="flyers.length" class="log">
     <button class="log-toggle" :aria-expanded="String(open)" @click="open = !open; confirmId = null">
       <span class="log-title">Scanned flyers</span>
-      <span class="log-count mono">{{ flyers.length }}</span>
+      <span class="log-count">{{ flyers.length }}</span>
       <span class="caret" :class="{ open }" aria-hidden="true">▾</span>
     </button>
 
@@ -39,9 +39,9 @@ function onDelete(id) {
       <li v-for="f in flyers" :key="f.id" class="log-row">
         <div class="log-id">
           <span class="log-store">{{ f.store }}</span>
-          <span class="log-meta mono">
-            {{ fmtDate(f.startDate) }}<template v-if="f.endDate"> – {{ fmtDate(f.endDate) }}</template>
-            · {{ f.itemCount }} item{{ f.itemCount === 1 ? '' : 's' }}
+          <span class="log-meta">
+            {{ fmtDate(f.startDate) }}<template v-if="f.endDate"> to {{ fmtDate(f.endDate) }}</template>,
+            {{ f.itemCount }} item{{ f.itemCount === 1 ? '' : 's' }}
           </span>
         </div>
         <button
@@ -64,9 +64,9 @@ function onDelete(id) {
 
 <style scoped>
 .log {
-  border: 1px solid var(--hairline);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: 0 0 0 1px var(--hairline);
 }
 
 .log-toggle {
@@ -82,7 +82,7 @@ function onDelete(id) {
 .log-toggle:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 
 .log-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 

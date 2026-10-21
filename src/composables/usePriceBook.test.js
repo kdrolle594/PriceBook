@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validity, migrateV1, normalizeStore, bestOffer, usePriceBook } from './usePriceBook.js'
+import { validity, migrateV1, normalizeStore, bestOffer, shelfCheck, usePriceBook } from './usePriceBook.js'
 
 const NOW = '2026-07-09'
 
@@ -129,5 +129,27 @@ describe('migrateV1', () => {
   it('normalizes missing endDate to null', () => {
     const { items } = migrateV1(v1)
     expect(items[0].history[0].endDate).toBeNull()
+  })
+})
+
+describe('shelfCheck', () => {
+  const item = (...prices) => ({
+    history: prices.map((price, i) => ({ price, date: `2026-07-${String(i + 1).padStart(2, '0')}` })),
+  })
+
+  it('has no position for a single sighting', () => {
+    expect(shelfCheck(item(3))).toMatchObject({ pct: null, tone: 'none', count: 1 })
+  })
+
+  it('centers a price that never changed', () => {
+    expect(shelfCheck(item(3, 3))).toMatchObject({ pct: 0.5, tone: 'flat' })
+  })
+
+  it('places the latest price between the low and the high', () => {
+    expect(shelfCheck(item(4, 2, 2))).toMatchObject({ pct: 0, tone: 'low', min: 2, max: 4 })
+    expect(shelfCheck(item(2, 8, 3))).toMatchObject({ tone: 'good' })
+    expect(shelfCheck(item(2, 8, 5))).toMatchObject({ pct: 0.5, tone: 'mid' })
+    expect(shelfCheck(item(2, 8, 7))).toMatchObject({ tone: 'high', current: 7, verdict: 'Higher than usual' })
+    expect(shelfCheck(item(2, 8))).toMatchObject({ pct: 1, verdict: 'Highest price seen' })
   })
 })

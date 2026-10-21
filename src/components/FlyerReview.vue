@@ -1,9 +1,12 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import PhotoFixer from './PhotoFixer.vue'
+import { rowBox, cropPhoto } from '../lib/photos.js'
 
 const props = defineProps({
   parsed: { type: Object, required: true },
   fileName: { type: String, default: '' },
+  file: { type: File, default: null }, // the flyer image, for cutting out item photos
   knownCanonicals: { type: Array, default: () => [] },
 })
 
@@ -13,9 +16,22 @@ const store = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const rows = ref([])
+const fixing = ref(null) // row whose photo is being fixed
+
+// Photo per row: {box, blob, url, fixed}; url is an object URL for the preview.
+function setPhoto(row, photo) {
+  if (row.photo?.url) URL.revokeObjectURL(row.photo.url)
+  row.photo = photo && { ...photo, url: URL.createObjectURL(photo.blob) }
+}
+
+function dropAllPhotos() {
+  for (const r of rows.value) if (r.photo?.url) URL.revokeObjectURL(r.photo.url)
+}
+onBeforeUnmount(dropAllPhotos)
 
 // Re-seed the form whenever the next flyer in the queue arrives.
 watch(() => props.parsed, (p) => {
+  dropAllPhotos()
   store.value = p.s || ''
   startDate.value = p.d || new Date().toISOString().slice(0, 10)
   endDate.value = p.e || ''
@@ -25,13 +41,43 @@ watch(() => props.parsed, (p) => {
     display: r[1] || r[0],
     size: r[2] || '',
     price: r[3],
+    box: rowBox(r),
+    photo: null,
   }))
+  cutPhotos(rows.value)
 }, { immediate: true })
+
+// Cut each scanned box out of the flyer; a bad box just leaves no photo.
+async function cutPhotos(list) {
+  if (!props.file) return
+  for (const r of list) {
+    if (!r.box) continue
+    try {
+      const blob = await cropPhoto(props.file, r.box)
+      if (rows.value.includes(r) && !r.photo) setPhoto(r, { box: r.box, blob, fixed: false })
+    } catch { /* leave it without a photo */ }
+  }
+}
+
+function onFixUse({ blob, box }) {
+  const r = fixing.value
+  setPhoto(r, { box, blob, fixed: true })
+  fixing.value = null
+}
+
+function onFixNone() {
+  setPhoto(fixing.value, null)
+  fixing.value = null
+}
+
+const photoCount = computed(() => rows.value.filter(r => r.photo).length)
 
 const known = computed(() => new Set(props.knownCanonicals))
 
 function removeRow(key) {
-  rows.value = rows.value.filter(r => r.key !== key)
+  const r = rows.value.find(x => x.key === key)
+  if (r?.photo?.url) URL.revokeObjectURL(r.photo.url)
+  rows.value = rows.value.filter(x => x.key !== key)
 }
 
 const saveable = computed(() =>
@@ -44,11 +90,14 @@ function save() {
     d: startDate.value || new Date().toISOString().slice(0, 10),
     e: endDate.value || '',
     i: rows.value.map(r => [r.canonical, r.display, r.size, Number(r.price)]),
+    photos: Object.fromEntries(rows.value
+      .filter(r => r.photo)
+      .map(r => [r.canonical, { blob: r.photo.blob, fixed: r.photo.fixed }])),
   })
 }
 
 function onKeydown(e) {
-  if (e.key === 'Escape') emit('discard')
+  if (e.key === 'Escape' && !fixing.value) emit('discard')
 }
 </script>
 
@@ -61,7 +110,9 @@ function onKeydown(e) {
             <h2>Review flyer</h2>
             <p v-if="fileName" class="file mono">{{ fileName }}</p>
           </div>
-          <span class="count">{{ rows.length }} item{{ rows.length === 1 ? '' : 's' }}</span>
+          <span class="count">
+            {{ rows.length }} item{{ rows.length === 1 ? '' : 's' }}<template v-if="file">, {{ photoCount }} with photos</template>
+          </span>
         </header>
 
         <div class="meta">
@@ -80,7 +131,18 @@ function onKeydown(e) {
         </div>
 
         <div class="rows">
+          <p v-if="file" class="photo-hint">Tap a photo to fix it. New photos only replace an item's photo when you fix them by hand.</p>
           <div v-for="r in rows" :key="r.key" class="item-row">
+            <button
+              v-if="file"
+              class="thumb"
+              :class="{ empty: !r.photo, fixed: r.photo?.fixed }"
+              :aria-label="r.photo ? `Fix photo for ${r.display}` : `Add photo for ${r.display}`"
+              @click="fixing = r"
+            >
+              <img v-if="r.photo" :src="r.photo.url" alt="">
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
             <div class="item-fields">
               <input v-model="r.display" class="f-name" type="text" aria-label="Item name">
               <input v-model="r.size" class="f-size" type="text" placeholder="size" aria-label="Size">
@@ -101,6 +163,16 @@ function onKeydown(e) {
         </footer>
       </div>
     </div>
+
+    <PhotoFixer
+      v-if="fixing"
+      :file="file"
+      :box="fixing.photo?.box || fixing.box"
+      :name="fixing.display"
+      @use="onFixUse"
+      @none="onFixNone"
+      @cancel="fixing = null"
+    />
   </Teleport>
 </template>
 
@@ -177,10 +249,8 @@ h2 {
 .field:first-child { flex: 1.4; }
 
 .label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -214,6 +284,38 @@ input:focus {
   padding: 4px 0;
 }
 
+.photo-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 2px 0 6px;
+}
+
+.thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  display: grid;
+  place-items: center;
+}
+
+.thumb img { width: 100%; height: 100%; object-fit: contain; }
+.thumb.empty { border-style: dashed; color: var(--faint); }
+.thumb.fixed { border-color: var(--low); box-shadow: 0 0 0 1px var(--low); }
+.thumb:hover { border-color: var(--ink); }
+
+.thumb svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 .item-fields {
   flex: 1;
   min-width: 0;
@@ -229,8 +331,6 @@ input:focus {
   flex: none;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   padding: 1px 7px;
   border-radius: 99px;
   white-space: nowrap;

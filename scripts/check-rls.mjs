@@ -58,6 +58,16 @@ for (const table of ['flyers', 'items', 'price_entries']) {
     `HTTP ${r.status}`)
 }
 
+// 2b. Anonymous photo uploads are rejected
+{
+  const r = await fetch(`${URL_}/storage/v1/object/item-photos/rls-smoke-test.jpg`, {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'image/jpeg' },
+    body: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+  })
+  check('anon upload to item-photos is rejected', !r.ok, `HTTP ${r.status}`)
+}
+
 // 3. Admin-only RPCs refuse anonymous callers
 for (const [fn, body] of [
   ['delete_flyer', { fid: '00000000-0000-0000-0000-000000000000' }],

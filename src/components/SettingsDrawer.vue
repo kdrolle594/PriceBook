@@ -44,33 +44,32 @@ function onKeydown(e) {
     <div v-if="open" class="scrim" @click.self="emit('close')" @keydown="onKeydown">
       <aside class="drawer" role="dialog" aria-modal="true" aria-label="Settings">
         <header class="drawer-head">
-          <h2>Settings</h2>
+          <h2>More</h2>
           <button class="close" aria-label="Close settings" @click="emit('close')">✕</button>
         </header>
 
         <section class="section">
-          <span class="label">Account</span>
+          <h3 class="label">Account</h3>
           <template v-if="userEmail">
             <p class="hint">
-              Signed in as <span class="mono">{{ userEmail }}</span>
-              <template v-if="isAdmin"> · admin</template>
+              Signed in as {{ userEmail }}<template v-if="isAdmin"> (admin)</template>
             </p>
             <button class="ghost solid" @click="emit('sign-out')">Sign out</button>
           </template>
           <template v-else>
             <p class="hint">
               No account needed to browse prices or build a shopping list.
-              Admins sign in here to scan flyers and manage the book.
+              Admins sign in here to scan flyers and manage prices.
             </p>
             <AdminLogin />
           </template>
         </section>
 
         <section v-if="hasData || isAdmin" class="section">
-          <span class="label">Backup</span>
+          <h3 class="label">Backup</h3>
           <p class="hint">
-            Download the price book as a JSON file<template v-if="isAdmin">,
-            or restore one — restoring adds anything the book doesn't already have</template>.
+            Download every price as a JSON file<template v-if="isAdmin">,
+            or restore one — restoring adds anything that isn't already here</template>.
           </p>
           <div class="backup-row">
             <button v-if="hasData" class="ghost solid" @click="emit('export')">Export backup</button>
@@ -91,8 +90,8 @@ function onKeydown(e) {
         </section>
 
         <section v-if="hasData && isAdmin" class="section danger-zone">
-          <span class="label">Data</span>
-          <p class="hint">Deletes every tracked price for everyone — export a backup first.</p>
+          <h3 class="label">Data</h3>
+          <p class="hint">Deletes every tracked price for everyone. Export a backup first.</p>
           <button class="danger" @click="clearAll">
             {{ confirmClear ? 'Really delete all tracked prices?' : 'Clear all data' }}
           </button>
@@ -117,7 +116,7 @@ function onKeydown(e) {
 .drawer {
   width: min(380px, 100vw);
   height: 100%;
-  background: var(--bg);
+  background: var(--surface);
   border-left: 1px solid var(--hairline);
   padding: 20px 22px;
   overflow-y: auto;
@@ -136,8 +135,8 @@ function onKeydown(e) {
 
 h2 {
   font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 23px;
+  font-weight: 800;
 }
 
 .close {
@@ -159,10 +158,8 @@ h2 {
 .section + .section { border-top: 1px solid var(--hairline); }
 
 .label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -179,7 +176,7 @@ h2 {
   border-radius: var(--radius-sm);
 }
 
-.ghost:hover { color: var(--ink); background: var(--surface); }
+.ghost:hover { color: var(--ink); background: var(--sunken); }
 
 .backup-row {
   display: flex;
@@ -189,7 +186,7 @@ h2 {
 
 .ghost.solid {
   color: var(--ink);
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--hairline);
   font-weight: 600;
 }

@@ -1,36 +1,36 @@
 <script setup>
-defineProps({
-  itemCount: { type: Number, required: true },
-  flyerCount: { type: Number, required: true },
-  cartCount: { type: Number, default: 0 },
-})
+const q = defineModel('q', { type: String })
 
-const emit = defineEmits(['open-settings', 'open-cart'])
+defineProps({
+  flyerCount: { type: Number, required: true },
+  showSearch: { type: Boolean, default: true },
+})
 </script>
 
 <template>
   <header class="head">
     <div class="head-inner">
       <div class="brand">
-        <h1>Price Book</h1>
-        <p class="tagline mono">
-          {{ itemCount }} items · {{ flyerCount }} {{ flyerCount === 1 ? 'flyer' : 'flyers' }} scanned
-        </p>
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><rect x="3" y="14" width="26" height="4" rx="2" /><circle cx="10" cy="16" r="5.5" /></svg>
+        </span>
+        <div>
+          <h1>Shelf Check</h1>
+          <p v-if="flyerCount" class="tagline">Prices from {{ flyerCount }} {{ flyerCount === 1 ? 'flyer' : 'flyers' }}</p>
+        </div>
       </div>
-      <button class="cart" aria-label="Open shopping list" title="Shopping list" @click="emit('open-cart')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="9" cy="21" r="1" />
-          <circle cx="20" cy="21" r="1" />
-          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-        </svg>
-        <span v-if="cartCount" class="badge mono">{{ cartCount > 99 ? '99+' : cartCount }}</span>
-      </button>
-      <button class="gear" aria-label="Open settings" title="Settings" @click="emit('open-settings')">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
+
+      <label v-if="showSearch" class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+        <input
+          v-model="q"
+          type="search"
+          placeholder="Search rice, sugar, tuna…"
+          aria-label="Search items"
+        >
+      </label>
+
+      <slot />
     </div>
   </header>
 </template>
@@ -40,75 +40,100 @@ const emit = defineEmits(['open-settings', 'open-cart'])
   position: sticky;
   top: 0;
   z-index: 10;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(10px);
 }
 
 .head-inner {
   max-width: var(--col);
   margin: 0 auto;
-  padding: 14px 16px;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  margin-right: auto;
 }
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--ink);
+}
+
+.mark svg { width: 24px; height: 24px; }
+.mark rect { fill: color-mix(in srgb, var(--surface) 35%, transparent); }
+.mark circle { fill: var(--low); stroke: var(--ink); stroke-width: 2; }
 
 h1 {
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .tagline {
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--muted);
-  letter-spacing: 0.02em;
 }
 
-.cart {
-  position: relative;
-  color: var(--muted);
-  padding: 8px;
-  border-radius: var(--radius-sm);
+.search {
+  flex: 1 1 100%;
   display: flex;
-  transition: color 0.15s ease;
-}
-
-.cart:hover {
-  color: var(--ink);
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 48px;
   background: var(--surface);
-}
-
-.badge {
-  position: absolute;
-  top: 0;
-  right: -2px;
-  min-width: 16px;
-  padding: 1px 4px;
-  background: var(--ink);
-  color: var(--bg);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.3;
-  text-align: center;
+  border: 1.5px solid var(--hairline);
   border-radius: 99px;
+  cursor: text;
 }
 
-.gear {
-  color: var(--muted);
-  padding: 8px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  transition: color 0.15s ease, transform 0.3s ease;
+.search:focus-within {
+  border-color: var(--ink);
 }
 
-.gear:hover {
-  color: var(--ink);
-  background: var(--surface);
-  transform: rotate(30deg);
+.search svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: none;
+  border: none;
+  font-size: 16px;
+}
+
+.search input:focus { outline: none; }
+.search input::placeholder { color: var(--faint); }
+
+@media (min-width: 960px) {
+  .head { border-bottom: 1px solid var(--hairline); }
+  .head-inner {
+    max-width: var(--wide);
+    flex-wrap: nowrap;
+    padding: 12px 24px;
+  }
+  .brand { margin-right: 0; }
+  .search { flex: 1 1 auto; max-width: 440px; height: 44px; }
 }
 </style>

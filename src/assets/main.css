@@ -1,27 +1,30 @@
 /* ————————————————————————————————————————————————
-   Price Book — design tokens
-   A private ledger of real prices: calm, precise, trustworthy.
+   Shelf Check — design tokens
+   A friendly shopping app with one job: is this price a real deal?
    ———————————————————————————————————————————————— */
 
 :root {
   /* palette — light */
-  --bg: #FBFBF9;
+  --bg: #F3F5F4;            /* shelf */
   --surface: #FFFFFF;
   --surface-raised: #FFFFFF;
-  --ink: #1A1C1E;
-  --muted: #6D7278;
-  --faint: #9BA0A6;
-  --hairline: #E7E7E2;
-  --hairline-strong: #D8D8D2;
-  --low: #0E7A4E;          /* historic low / savings */
-  --low-soft: #E7F3ED;
-  --high: #B4690E;         /* seen cheaper before */
-  --high-soft: #F8EEDF;
+  --sunken: #E8ECEA;
+  --ink: #1D2B45;           /* navy */
+  --muted: #5E6878;
+  --faint: #6B7482;
+  --hairline: #E3E7E5;
+  --hairline-strong: #CDD3D1;
+  --low: #13773F;           /* basil — historic low / good deal */
+  --low-soft: #E2F2E8;
+  --high: #B0530F;          /* tangerine — higher than usual */
+  --high-soft: #FCEBDD;
+  --tag: #FFD84D;           /* sale-ends-soon tag */
+  --on-tag: #3A2E00;
   --danger: #B3372E;
   --danger-soft: #F9EAE8;
-  --focus: #1A1C1E;
-  --scrim: rgba(20, 21, 23, 0.4);
-  --shadow: 0 1px 2px rgba(26, 28, 30, 0.05), 0 8px 24px rgba(26, 28, 30, 0.06);
+  --focus: #1D2B45;
+  --scrim: rgba(18, 26, 40, 0.42);
+  --shadow: 0 1px 2px rgba(29, 43, 69, 0.06), 0 10px 28px rgba(29, 43, 69, 0.10);
 
   /* chart series (validated categorical slots — fixed order, never cycled) */
   --series-1: #2A78D6;
@@ -30,35 +33,40 @@
   --series-4: #008300;
 
   /* type */
-  --font-display: "Bricolage Grotesque", Georgia, serif;
-  --font-body: "Instrument Sans", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", Consolas, monospace;
+  --font-display: "Gabarito", system-ui, sans-serif;
+  --font-body: "Onest", system-ui, sans-serif;
+  --font-mono: var(--font-body);   /* numbers use tabular figures, not a monospace face */
 
   /* rhythm */
-  --radius: 10px;
-  --radius-sm: 6px;
+  --radius: 16px;
+  --radius-sm: 10px;
   --col: 720px;
+  --wide: 1180px;
+  --tabbar-h: 64px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #141517;
-    --surface: #1D1F22;
-    --surface-raised: #232529;
-    --ink: #ECEDEA;
-    --muted: #9BA0A6;
-    --faint: #6D7278;
-    --hairline: #2B2D31;
-    --hairline-strong: #3A3D42;
-    --low: #4CC38A;
-    --low-soft: #16281F;
-    --high: #E0A458;
-    --high-soft: #2C2214;
+    --bg: #121820;
+    --surface: #1A222D;
+    --surface-raised: #212A36;
+    --sunken: #0E141B;
+    --ink: #E9EEF4;
+    --muted: #A2ACBA;
+    --faint: #7E8999;
+    --hairline: #26303C;
+    --hairline-strong: #364150;
+    --low: #4CC384;
+    --low-soft: #15291F;
+    --high: #F0964F;
+    --high-soft: #2E1F13;
+    --tag: #F2CB3C;
+    --on-tag: #2A2100;
     --danger: #E5786E;
     --danger-soft: #2E1B19;
-    --focus: #ECEDEA;
+    --focus: #E9EEF4;
     --scrim: rgba(0, 0, 0, 0.55);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.4);
 
     --series-1: #3987E5;
     --series-2: #199E70;
@@ -75,7 +83,7 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.55 var(--font-body);
+  font: 15px/1.5 var(--font-body);
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
 }
@@ -110,4 +118,12 @@ button { background: none; border: none; cursor: pointer; }
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* prices: chunky display face, digits line up */
+.price-num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }

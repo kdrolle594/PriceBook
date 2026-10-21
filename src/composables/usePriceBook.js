@@ -1,10 +1,11 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../lib/supabase.js'
+import { uploadPhoto, deletePhoto } from '../lib/photos.js'
 
 // Pre-Supabase localStorage keys — kept readable so old data can be migrated.
 const LOCAL_KEYS = ['pricebook-v2', 'pricebook-v1']
 
-// items:  [{id, canonical, display, size, history: [{id, flyerId, store, date, endDate, price}]}]
+// items:  [{id, canonical, display, size, photoPath, history: [{id, flyerId, store, date, endDate, price}]}]
 // flyers: [{id, store, startDate, endDate, itemCount, createdAt}]
 const items = ref([])
 const flyers = ref([])
@@ -33,6 +34,7 @@ async function loadAll() {
       canonical: r.canonical,
       display: r.display,
       size: r.size,
+      photoPath: r.photo_path || null,
       history: [],
     }]))
     for (const r of pe.data) {
@@ -98,6 +100,24 @@ export function bestOffer(item, now = today()) {
   }
   const entry = [...item.history].sort((a, b) => b.date.localeCompare(a.date))[0]
   return { entry, onSale: false }
+}
+
+// Where the latest price sits between the lowest and highest ever seen —
+// the "shelf check" shown on every item. pct is 0 at the low, 1 at the high.
+export function shelfCheck(item) {
+  const prices = item.history.map(h => h.price)
+  const current = [...item.history].sort((a, b) => b.date.localeCompare(a.date))[0].price
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const base = { current, min, max, count: prices.length }
+  if (prices.length < 2) return { ...base, pct: null, tone: 'none', verdict: 'First price seen' }
+  if (min === max) return { ...base, pct: 0.5, tone: 'flat', verdict: 'Same price every time' }
+  const pct = (current - min) / (max - min)
+  if (current <= min) return { ...base, pct, tone: 'low', verdict: 'Lowest price seen' }
+  if (pct <= 1 / 3) return { ...base, pct, tone: 'good', verdict: 'Close to the low' }
+  if (current >= max) return { ...base, pct, tone: 'high', verdict: 'Highest price seen' }
+  if (pct >= 2 / 3) return { ...base, pct, tone: 'high', verdict: 'Higher than usual' }
+  return { ...base, pct, tone: 'mid', verdict: 'About usual' }
 }
 
 // v1 localStorage had no flyer records — group entries by store+date into
@@ -200,8 +220,10 @@ export function usePriceBook() {
     return ((hist[0].price - hist[1].price) / hist[1].price) * 100
   }
 
-  // Merge one reviewed flyer ({s: store, d: start, e: end, i: rows}) into the book.
-  // Returns {added, updated}.
+  // Merge one reviewed flyer ({s: store, d: start, e: end, i: rows, photos}) into
+  // the book. photos maps canonical → {blob, fixed}; a scanned photo only fills
+  // an item that has none, a photo the admin fixed by hand always replaces.
+  // Returns {added, updated, photos, photoErrors}.
   async function mergeFlyer(parsed) {
     // Dedupe rows by canonical — the unique index rejects double-hits otherwise
     const seen = new Set()
@@ -209,7 +231,7 @@ export function usePriceBook() {
       .map(r => ({ canonical: r[0], display: r[1], size: r[2], price: Number(r[3]) }))
       .filter(p => p.canonical && p.price > 0)
       .filter(p => !seen.has(p.canonical) && seen.add(p.canonical))
-    if (!rows.length) return { added: 0, updated: 0 }
+    if (!rows.length) return { added: 0, updated: 0, photos: 0, photoErrors: 0 }
 
     const store = normalizeStore(parsed.s, stores.value) || 'Unknown'
     const startDate = parsed.d || today()
@@ -229,10 +251,11 @@ export function usePriceBook() {
     // Match rows to existing items by canonical; create the rest
     const canonicals = rows.map(r => r.canonical)
     const { data: existing } = await supabase.from('items')
-      .select('id, canonical')
+      .select('id, canonical, photo_path')
       .in('canonical', canonicals)
       .throwOnError()
     const idByCanonical = new Map(existing.map(e => [e.canonical, e.id]))
+    const photoByCanonical = new Map(existing.map(e => [e.canonical, e.photo_path]))
 
     const newRows = rows.filter(r => !idByCanonical.has(r.canonical))
     if (newRows.length) {
@@ -272,9 +295,24 @@ export function usePriceBook() {
       .eq('id', flyer.id)
       .throwOnError()
 
+    // Photos are extras: a failed upload never loses the flyer's prices.
+    let photos = 0
+    let photoErrors = 0
+    for (const [canonical, photo] of Object.entries(parsed.photos || {})) {
+      const itemId = idByCanonical.get(canonical)
+      const old = photoByCanonical.get(canonical)
+      if (!itemId || !photo?.blob || (old && !photo.fixed)) continue
+      try {
+        await savePhoto(itemId, old, photo.blob)
+        photos++
+      } catch {
+        photoErrors++
+      }
+    }
+
     await loadAll()
     const added = newRows.length
-    return { added, updated: inserted.length - added }
+    return { added, updated: inserted.length - added, photos, photoErrors }
   }
 
   // Remove one flyer and every price it contributed; the delete_flyer RPC
@@ -290,7 +328,27 @@ export function usePriceBook() {
   }
 
   async function deleteItem(id) {
+    const path = items.value.find(i => i.id === id)?.photoPath
     await supabase.from('items').delete().eq('id', id).throwOnError()
+    await deletePhoto(path).catch(() => {}) // a leftover file is harmless
+    await loadAll()
+  }
+
+  // Upload, point the item at it, then drop the old file.
+  async function savePhoto(itemId, oldPath, blob) {
+    const path = await uploadPhoto(itemId, blob)
+    await supabase.from('items').update({ photo_path: path }).eq('id', itemId).throwOnError()
+    await deletePhoto(oldPath).catch(() => {})
+  }
+
+  async function setItemPhoto(item, blob) {
+    await savePhoto(item.id, item.photoPath, blob)
+    await loadAll()
+  }
+
+  async function removeItemPhoto(item) {
+    await supabase.from('items').update({ photo_path: null }).eq('id', item.id).throwOnError()
+    await deletePhoto(item.photoPath).catch(() => {})
     await loadAll()
   }
 
@@ -349,7 +407,7 @@ export function usePriceBook() {
   // Restore a backup (v2, or v1 which gets migrated). Idempotent: everything
   // upserts, so re-importing the same file adds nothing twice.
   async function importJSON(data) {
-    if (!data || !Array.isArray(data.items)) throw new Error('Not a Price Book backup file')
+    if (!data || !Array.isArray(data.items)) throw new Error('Not a Shelf Check backup file')
     const book = Array.isArray(data.flyers) ? data : migrateV1(data)
 
     if (book.flyers.length) {
@@ -417,5 +475,6 @@ export function usePriceBook() {
     sortedHist, latest, minPrice, isDeal, deltaPct, validity,
     loadAll, mergeFlyer, deleteFlyer, exportJSON, importJSON, localBackup, clearAll,
     updateItem, deleteItem, updateEntry, deleteEntry, mergeItems, addManualPrice,
+    setItemPhoto, removeItemPhoto,
   }
 }

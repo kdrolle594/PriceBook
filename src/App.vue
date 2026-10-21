@@ -1,8 +1,7 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import UploadZone from './components/UploadZone.vue'
-import StatsBar from './components/StatsBar.vue'
 import FilterBar from './components/FilterBar.vue'
 import ItemRow from './components/ItemRow.vue'
 import EmptyState from './components/EmptyState.vue'
@@ -12,6 +11,7 @@ import FlyerLog from './components/FlyerLog.vue'
 import ItemDetail from './components/ItemDetail.vue'
 import AddPriceForm from './components/AddPriceForm.vue'
 import CartView from './components/CartView.vue'
+import TabBar from './components/TabBar.vue'
 import { usePriceBook } from './composables/usePriceBook.js'
 import { useCart } from './composables/useCart.js'
 import { useAuth } from './composables/useAuth.js'
@@ -33,6 +33,41 @@ const { count: cartCount } = useCart()
 
 const settingsOpen = ref(false)
 const view = ref('book') // 'book' | 'cart'
+
+// Desktop docks the item detail beside the list; phones get a bottom sheet.
+const wideQuery = window.matchMedia('(min-width: 960px)')
+const isWide = ref(wideQuery.matches)
+const onWide = e => { isWide.value = e.matches }
+wideQuery.addEventListener('change', onWide)
+onBeforeUnmount(() => wideQuery.removeEventListener('change', onWide))
+
+const activeTab = computed(() => {
+  if (view.value === 'cart') return 'list'
+  return filter.value === 'deals' ? 'deals' : 'prices'
+})
+
+function onTab(tab) {
+  if (tab === 'list') {
+    view.value = 'cart'
+    return
+  }
+  view.value = 'book'
+  filter.value = tab === 'deals' ? 'deals' : 'all'
+}
+
+const uploader = ref(null)
+async function onScan() {
+  view.value = 'book'
+  await nextTick()
+  uploader.value?.pick()
+}
+
+const filterCounts = computed(() => ({
+  all: items.value.length,
+  deals: dealCount.value,
+  sale: saleCount.value,
+  multi: multiCount.value,
+}))
 const busy = ref(false)
 const progress = ref('')
 const status = ref('')
@@ -72,7 +107,7 @@ async function onFiles(files) {
       : `Reading ${file.name}…`
     try {
       const parsed = await extractFlyer(file, knownCanonicals.value)
-      pendingReviews.value.push({ fileName: file.name, parsed })
+      pendingReviews.value.push({ fileName: file.name, file, parsed })
     } catch (err) {
       errors.push(`${file.name}: ${err.message}`)
     }
@@ -84,8 +119,10 @@ async function onFiles(files) {
 
 async function onReviewSave(edited) {
   try {
-    const { added, updated } = await mergeFlyer(edited)
+    const { added, updated, photos, photoErrors } = await mergeFlyer(edited)
     status.value = `${edited.s}: ${added} new, ${updated} updated`
+      + (photos ? `, ${photos} photo${photos === 1 ? '' : 's'} saved` : '')
+      + (photoErrors ? `. ${photoErrors} photo${photoErrors === 1 ? '' : 's'} failed to upload; add them from the item.` : '')
     isErr.value = false
     pendingReviews.value.shift()
   } catch (err) {
@@ -125,7 +162,7 @@ function onExport() {
   const blob = new Blob([exportJSON()], { type: 'application/json' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `pricebook-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `shelf-check-backup-${new Date().toISOString().slice(0, 10)}.json`
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -165,7 +202,7 @@ async function onSignOut() {
   <!-- Supabase not configured yet: point at the setup steps instead of crashing -->
   <div v-if="!isConfigured" class="setup">
     <h1>Almost there</h1>
-    <p>Price Book now syncs through Supabase, but this build isn't connected yet.</p>
+    <p>Shelf Check syncs through Supabase, but this build isn't connected yet.</p>
     <ol>
       <li>Create a free project at <span class="mono">supabase.com</span></li>
       <li>Run <span class="mono">supabase/schema.sql</span> in the SQL editor</li>
@@ -176,63 +213,99 @@ async function onSignOut() {
   </div>
 
   <template v-else>
-    <AppHeader
-      :item-count="items.length"
-      :flyer-count="flyers.length"
-      :cart-count="cartCount"
-      @open-cart="view = view === 'cart' ? 'book' : 'cart'"
-      @open-settings="settingsOpen = true"
-    />
+    <AppHeader v-model:q="q" :flyer-count="flyers.length" :show-search="view === 'book'">
+      <TabBar
+        v-if="isWide"
+        inline
+        :active="activeTab"
+        :cart-count="cartCount"
+        :deal-count="dealCount"
+        :is-admin="isAdmin"
+        :busy="busy"
+        @select="onTab"
+        @scan="onScan"
+        @more="settingsOpen = true"
+      />
+    </AppHeader>
 
-    <main class="page">
-      <CartView v-if="view === 'cart'" @back="view = 'book'" />
+    <main class="page" :class="{ split: isWide && view === 'book' && items.length }">
+      <CartView v-if="view === 'cart'" />
 
       <template v-else>
-        <UploadZone
-          v-if="isAdmin"
-          :busy="busy"
-          :progress="progress"
-          @files="onFiles"
-        />
-
-        <div v-if="isAdmin" class="manual">
-          <button class="manual-toggle" @click="manualAddOpen = !manualAddOpen">
-            {{ manualAddOpen ? '− Never mind' : '+ Add a price you saw in-store' }}
-          </button>
-          <AddPriceForm
-            v-if="manualAddOpen"
-            :stores="stores"
-            @done="status = $event; isErr = false; manualAddOpen = false"
-            @error="fail($event)"
+        <div class="list-col">
+          <UploadZone
+            v-if="isAdmin"
+            ref="uploader"
+            :busy="busy"
+            :progress="progress"
+            @files="onFiles"
           />
+
+          <div v-if="isAdmin" class="manual">
+            <button class="manual-toggle" @click="manualAddOpen = !manualAddOpen">
+              {{ manualAddOpen ? 'Cancel' : 'Add a price you saw in the store' }}
+            </button>
+            <AddPriceForm
+              v-if="manualAddOpen"
+              :stores="stores"
+              @done="status = $event; isErr = false; manualAddOpen = false"
+              @error="fail($event)"
+            />
+          </div>
+
+          <p class="status" :class="{ err: isErr, shown: status }" role="status">{{ status }}</p>
+
+          <template v-if="items.length">
+            <FilterBar v-model:filter="filter" :counts="filterCounts" />
+
+            <ul v-if="shown.length" class="item-list">
+              <ItemRow
+                v-for="it in shown"
+                :key="it.canonical"
+                :item="it"
+                :selected="isWide && it.id === detailId"
+                @open="detailId = it.id"
+              />
+            </ul>
+            <p v-else class="no-match">Nothing matches. Try another search or filter.</p>
+
+            <FlyerLog :flyers="sortedFlyers" :can-delete="isAdmin" @delete="onDeleteFlyer" />
+          </template>
+
+          <EmptyState v-else-if="!busy && !loading" :is-admin="isAdmin" />
         </div>
 
-        <p class="status" :class="{ err: isErr }" role="status">{{ status }}</p>
-
-        <template v-if="items.length">
-          <StatsBar
-            :deal-count="dealCount"
-            :sale-count="saleCount"
-            :store-count="stores.length"
-            :multi-count="multiCount"
+        <aside v-if="isWide && items.length" class="detail-col">
+          <ItemDetail
+            v-if="detailItem"
+            :key="detailItem.id"
+            docked
+            :item="detailItem"
+            :is-admin="isAdmin"
+            @close="detailId = null"
           />
-
-          <FilterBar v-model:q="q" v-model:filter="filter" />
-
-          <FlyerLog :flyers="sortedFlyers" :can-delete="isAdmin" @delete="onDeleteFlyer" />
-
-          <ul v-if="shown.length" class="item-list">
-            <ItemRow v-for="it in shown" :key="it.canonical" :item="it" @open="detailId = it.id" />
-          </ul>
-          <p v-else class="no-match">Nothing matches — try a different search or filter.</p>
-        </template>
-
-        <EmptyState v-else-if="!busy && !loading" :is-admin="isAdmin" />
+          <div v-else class="detail-empty">
+            <p class="detail-empty-title">Pick an item</p>
+            <p>Its shelf check, price chart, and every price seen show up here.</p>
+          </div>
+        </aside>
       </template>
     </main>
 
+    <TabBar
+      v-if="!isWide"
+      :active="activeTab"
+      :cart-count="cartCount"
+      :deal-count="dealCount"
+      :is-admin="isAdmin"
+      :busy="busy"
+      @select="onTab"
+      @scan="onScan"
+      @more="settingsOpen = true"
+    />
+
     <ItemDetail
-      v-if="detailItem"
+      v-if="detailItem && !isWide"
       :item="detailItem"
       :is-admin="isAdmin"
       @close="detailId = null"
@@ -242,6 +315,7 @@ async function onSignOut() {
       v-if="currentReview"
       :parsed="currentReview.parsed"
       :file-name="currentReview.fileName"
+      :file="currentReview.file"
       :known-canonicals="knownCanonicals"
       @save="onReviewSave"
       @discard="onReviewDiscard"
@@ -301,42 +375,91 @@ async function onSignOut() {
 .page {
   max-width: var(--col);
   margin: 0 auto;
-  padding: 20px 16px 80px;
+  padding: 8px 16px calc(var(--tabbar-h) + 40px);
+}
+
+.list-col {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 959px) {
+  /* phones scan from the tab bar; the drop zone stays mounted for its file picker */
+  .list-col > :deep(.drop) { display: none; }
+}
+
+@media (min-width: 960px) {
+  .page { max-width: var(--wide); padding: 24px 24px 64px; }
+  .page.split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    gap: 28px;
+    align-items: start;
+  }
+}
+
+.detail-col {
+  position: sticky;
+  top: 92px;
+}
+
+.detail-empty {
+  padding: 40px 28px;
+  border: 1.5px dashed var(--hairline-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.detail-empty-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
 }
 
 .manual {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: -8px;
 }
 
 .manual-toggle {
-  align-self: center;
-  font-size: 12.5px;
-  color: var(--muted);
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
+  align-self: flex-start;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 99px;
+  border: 1.5px solid var(--hairline-strong);
 }
 
-.manual-toggle:hover { color: var(--ink); background: var(--surface); }
+.manual-toggle:hover { border-color: var(--ink); }
 
 .status {
-  min-height: 20px;
-  margin: -8px 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
-  text-align: center;
+}
+
+.status:not(.shown) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .status.err { color: var(--danger); }
 
 .item-list {
   list-style: none;
-  border-top: 1px solid var(--hairline);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px var(--hairline);
+  overflow: hidden;
 }
 
 .no-match {

@@ -21,7 +21,7 @@ function buildPrompt(knownCanonicals: string[]): string {
   return `Extract every product and price from this supermarket flyer.
 
 Return ONLY compact JSON, no markdown fences, no commentary, no spaces or newlines:
-{"s":"store name","d":"YYYY-MM-DD","e":"YYYY-MM-DD","i":[["canonical","display","size",price],...]}
+{"s":"store name","d":"YYYY-MM-DD","e":"YYYY-MM-DD","i":[["canonical","display","size",price,x1,y1,x2,y2],...]}
 
 Rules:
 - d: flyer start date; if unreadable use today
@@ -31,6 +31,7 @@ ${knownCanonicals.join('\n') || '(none yet)'}
 - display: short readable name (brand + product)
 - size: package size as printed (e.g. "4lbs", "12oz")
 - price: bare number like 5.00 — never a $ sign, never quotes. For "2 for $3.00" style, use per-unit price (1.50). Skip unreadable prices.
+- x1,y1,x2,y2: box around the item's product photo, as whole numbers 0-1000 where 0,0 is the image's top-left and 1000,1000 its bottom-right (fractions of width and height, not pixels). Box the product picture only, not the price or text. If the item has no photo, end the row after price.
 - Include every item. Keep strings short.`
 }
 

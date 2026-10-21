@@ -1,37 +1,26 @@
 <script setup>
 import { computed } from 'vue'
-import Sparkline from './Sparkline.vue'
-import { usePriceBook } from '../composables/usePriceBook.js'
+import DealMeter from './DealMeter.vue'
+import { usePriceBook, shelfCheck } from '../composables/usePriceBook.js'
 import { useCart } from '../composables/useCart.js'
+import { photoUrl } from '../lib/photos.js'
 
 const props = defineProps({
   item: { type: Object, required: true },
+  selected: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['open'])
 
-const { sortedHist, latest, minPrice, isDeal, deltaPct, validity } = usePriceBook()
+const { latest, validity } = usePriceBook()
 const { inCart, toggle } = useCart()
 
 const carted = computed(() => inCart(props.item.id))
 
-const hist = computed(() => sortedHist(props.item))
 const current = computed(() => latest(props.item))
-const min = computed(() => minPrice(props.item))
-const deal = computed(() => isDeal(props.item))
-const delta = computed(() => deltaPct(props.item))
-const hasHistory = computed(() => props.item.history.length > 1)
+const check = computed(() => shelfCheck(props.item))
 const sale = computed(() => validity(current.value))
-
-// chronological prices for the sparkline (oldest → newest)
-const trend = computed(() => [...hist.value].reverse().map(h => h.price))
-
-const deltaLabel = computed(() => {
-  if (delta.value === null) return ''
-  const pct = Math.abs(delta.value).toFixed(0)
-  if (Math.round(delta.value) === 0) return 'same as last'
-  return delta.value < 0 ? `↓ ${pct}% vs last` : `↑ ${pct}% vs last`
-})
+const photo = computed(() => photoUrl(props.item.photoPath))
 
 function fmtDate(iso) {
   const d = new Date(iso + 'T00:00:00')
@@ -41,40 +30,40 @@ function fmtDate(iso) {
 </script>
 
 <template>
-  <li class="row">
-    <button class="row-main" @click="emit('open', item)">
-      <div class="row-id">
-        <span class="row-name">{{ item.display }}</span>
-        <span class="row-meta">
-          <span v-if="item.size">{{ item.size }}</span>
-          <span v-if="item.size"> · </span>
-          <span>{{ current.store }} · {{ fmtDate(current.date) }}</span>
+  <li class="row" :class="{ selected }">
+    <button class="row-main" :aria-current="selected ? 'true' : undefined" @click="emit('open', item)">
+      <span class="photo" :class="{ none: !photo }" aria-hidden="true">
+        <img v-if="photo" :src="photo" alt="" loading="lazy">
+        <template v-else>{{ item.display.charAt(0) }}</template>
+      </span>
+      <span class="body">
+      <span class="line">
+        <span class="name">{{ item.display }}</span>
+        <span class="price price-num" :class="`tone-${check.tone}`">${{ current.price.toFixed(2) }}</span>
+      </span>
+      <span class="line meta">
+        <span class="where">
+          <template v-if="item.size">{{ item.size }}, </template>{{ current.store }}, {{ fmtDate(current.date) }}
         </span>
-      </div>
-
-      <Sparkline v-if="hasHistory" :prices="trend" />
-
-      <div class="row-price">
-        <span class="price mono" :class="{ 'is-low': hasHistory && deal }">
-          ${{ current.price.toFixed(2) }}
-        </span>
-        <span v-if="hasHistory && deal" class="chip chip-low">historic low</span>
-        <span v-else-if="hasHistory" class="chip chip-high">{{ deltaLabel || 'seen cheaper' }}</span>
-        <span v-else class="chip chip-plain">first sighting</span>
-        <span v-if="sale" class="chip" :class="`chip-${sale.state}`">{{ sale.label }}</span>
-      </div>
-
-      <span class="caret" aria-hidden="true">›</span>
+        <span v-if="sale" class="tag" :class="`tag-${sale.state}`">{{ sale.label }}</span>
+      </span>
+      <span v-if="check.count > 1" class="line check">
+        <DealMeter :check="check" />
+        <span class="verdict" :class="`tone-${check.tone}`">{{ check.verdict }}</span>
+      </span>
+      <span v-else class="line check first">First price seen, no history yet</span>
+      </span>
     </button>
 
     <button
       class="cart-btn"
       :class="{ carted }"
       :aria-label="carted ? `Remove ${item.display} from shopping list` : `Add ${item.display} to shopping list`"
-      :title="carted ? 'In your shopping list' : 'Add to shopping list'"
+      :title="carted ? 'On your list' : 'Add to list'"
       @click="toggle(item.id)"
     >
-      {{ carted ? '✓' : '+' }}
+      <svg v-if="carted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+      <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
     </button>
   </li>
 </template>
@@ -85,107 +74,150 @@ function fmtDate(iso) {
   display: flex;
   align-items: center;
   gap: 4px;
-  border-bottom: 1px solid var(--hairline);
+  padding-right: 12px;
 }
 
+.row + .row { border-top: 1px solid var(--hairline); }
+
+.row.selected { background: color-mix(in srgb, var(--low) 7%, var(--surface)); }
+
 .row-main {
-  display: flex;
-  align-items: center;
-  gap: 14px;
   flex: 1;
   min-width: 0;
-  padding: 14px 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 8px 14px 14px;
   text-align: left;
-  border-radius: var(--radius-sm);
+}
+
+.photo {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff; /* product shots are cut from white-paper flyers */
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  display: grid;
+  place-items: center;
+}
+
+.photo img { width: 100%; height: 100%; object-fit: contain; }
+
+.photo.none {
+  background: var(--sunken);
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-main:hover .name { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hairline-strong); }
+
+.line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 600;
+  font-size: 15.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price {
+  flex: none;
+  font-size: 21px;
+  line-height: 1.1;
+}
+
+.price.tone-low { color: var(--low); }
+
+.meta { align-items: center; }
+
+.where {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* sale window, styled like a shelf tag */
+.tag {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  color: var(--muted);
+  background: var(--sunken);
+}
+
+.tag-ending { background: var(--tag); color: var(--on-tag); }
+.tag-expired { text-decoration: line-through; color: var(--faint); }
+
+.check {
+  align-items: center;
+  margin-top: 6px;
+}
+
+.check :deep(.meter) { flex: 1; max-width: 260px; }
+
+.verdict {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.verdict.tone-low, .verdict.tone-good { color: var(--low); }
+.verdict.tone-high { color: var(--high); }
+
+.first {
+  font-size: 12.5px;
+  color: var(--faint);
 }
 
 .cart-btn {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  border: 1px solid var(--hairline);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1;
+  border: 1.5px solid var(--hairline-strong);
+  color: var(--ink);
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.cart-btn:hover { color: var(--ink); border-color: var(--hairline-strong); }
+.cart-btn:hover { border-color: var(--ink); }
 
 .cart-btn.carted {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
+  background: var(--low);
+  border-color: var(--low);
+  color: var(--surface);
 }
 
-.row-main:hover { background: var(--surface); }
-
-.row-id {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.row-name {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.row-meta {
-  font-size: 12.5px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.row-price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  flex: none;
-}
-
-.price {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.price.is-low { color: var(--low); }
-
-.chip {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 1px 7px;
-  border-radius: 99px;
-  white-space: nowrap;
-}
-
-.chip-low { background: var(--low-soft); color: var(--low); }
-.chip-high { background: var(--high-soft); color: var(--high); }
-.chip-plain { background: var(--surface); color: var(--faint); border: 1px solid var(--hairline); }
-.chip-active { background: var(--surface); color: var(--muted); border: 1px solid var(--hairline); }
-.chip-ending { background: var(--high-soft); color: var(--high); }
-.chip-expired { background: var(--surface); color: var(--faint); border: 1px solid var(--hairline); text-decoration: line-through; }
-
-.caret {
-  flex: none;
-  color: var(--faint);
-  font-size: 15px;
-}
-
-@media (max-width: 480px) {
+@media (max-width: 420px) {
+  .check :deep(.meter .end) { display: none; }
+  .photo { width: 48px; height: 48px; }
   .row-main { gap: 10px; }
-  .spark, .row-main :deep(.spark) { display: none; }
 }
 </style>
